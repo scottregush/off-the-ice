@@ -56,6 +56,7 @@ head = f'''<!doctype html>
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="index,follow">
+<meta name="google-site-verification" content="UMQqYc_pF2QXIGmAaknFINabVE4EtxecVviGykGKkk8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{desc}">
