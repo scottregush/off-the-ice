@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://scottregush.github.io/off-the-ice/sitemap.xml
