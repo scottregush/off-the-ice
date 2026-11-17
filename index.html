@@ -28,6 +28,7 @@
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
 </head>
 <body>
+<script>try{var t=localStorage.getItem("oti-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@700;800&family=Instrument+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: a navy sticky bar over an ice-white band marked with real rink lines (red centre line, blue line,
@@ -570,6 +571,20 @@ footer b{color:var(--ink);font-weight:600}
 .more-b{color:var(--blue);font-weight:600;min-height:40px;padding:8px 0}
 @media (max-width:720px){ .tsheet > summary{margin:-16px;padding:16px} }
 
+/* ---------- theme switch ---------- */
+.bar-in .tabs{margin-left:auto}
+.theme{position:relative;flex:none}
+.theme-b{width:40px;height:40px;border-radius:50%;border:0;background:none;color:var(--on-navy-muted);cursor:pointer;display:grid;place-items:center;padding:0}
+.theme-b:hover,.theme-b[aria-expanded="true"]{background:var(--navy-2);color:var(--on-navy)}
+.theme-b svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:none}
+.theme-b svg .fill{fill:currentColor;stroke:none}
+.theme-b[data-mode="auto"] .ti-auto,.theme-b[data-mode="light"] .ti-light,.theme-b[data-mode="dark"] .ti-dark{display:block}
+.theme-m{position:absolute;right:0;top:calc(100% + 8px);z-index:20;min-width:210px;padding:6px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:var(--pop);display:flex;flex-direction:column;gap:2px}
+.theme-m button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:9px 12px 9px 34px;font-weight:600;font-size:14.5px;cursor:pointer;position:relative;min-height:40px}
+.theme-m button span{font-weight:400;font-size:12.5px;color:var(--muted)}
+.theme-m button:hover{background:var(--inset)}
+.theme-m button[aria-checked="true"]::before{content:"";position:absolute;left:13px;top:15px;width:9px;height:5px;border-left:2px solid var(--blue);border-bottom:2px solid var(--blue);transform:rotate(-45deg)}
+
 /* ---------- motion (timings from the Stewdio motion board) ---------- */
 @media (prefers-reduced-motion:no-preference){
   .chip,.pick,.bar-row,.hv,.tabs a,.btn,.rtab,.res-o,.rr-x,.dlg-x{transition:background-color .14s,border-color .14s,box-shadow .14s,color .14s}
@@ -616,6 +631,18 @@ footer b{color:var(--ink);font-weight:600}
       <a href="#stranieri" data-view="stranieri"><svg class="ti" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3c2 2 2.8 4.5 2.8 7s-.8 5-2.8 7c-2-2-2.8-4.5-2.8-7S8 5 10 3z"/></svg>Stranieri</a>
       <a href="#rosa" data-view="rosa"><svg class="ti" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="4" y="3.5" width="12" height="14" rx="2"/><path d="M7.5 8h5M7.5 11h5M7.5 14h3"/></svg><span class="t-long">Le mie rose</span><span class="t-short">Rose</span><span class="tab-n" id="r-n" hidden></span></a>
     </nav>
+    <div class="theme" id="theme">
+      <button class="theme-b" id="theme-b" aria-haspopup="true" aria-expanded="false" aria-controls="theme-m" aria-label="Tema: automatico" title="Tema">
+        <svg class="ti-auto" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7"/><path d="M10 3a7 7 0 0 1 0 14z" class="fill"/></svg>
+        <svg class="ti-light" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="3.6"/><path d="M10 1.8v2.2M10 16v2.2M1.8 10H4M16 10h2.2M4.2 4.2l1.6 1.6M14.2 14.2l1.6 1.6M4.2 15.8l1.6-1.6M14.2 5.8l1.6-1.6"/></svg>
+        <svg class="ti-dark" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.5 12.6A7 7 0 0 1 7.4 3.5a7 7 0 1 0 9.1 9.1z"/></svg>
+      </button>
+      <div class="theme-m" id="theme-m" role="menu" aria-label="Tema" hidden>
+        <button role="menuitemradio" aria-checked="true" data-theme-set="auto">Automatico<span>come il dispositivo</span></button>
+        <button role="menuitemradio" aria-checked="false" data-theme-set="light">Chiaro</button>
+        <button role="menuitemradio" aria-checked="false" data-theme-set="dark">Scuro</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -1481,6 +1508,27 @@ document.addEventListener('change', e => { if (e.target.id === 'r-sort'){ rsort 
 document.addEventListener('submit', e => { if (e.target.id === 'r-name-form'){ e.preventDefault(); renameRoster($('#r-name').value); } });
 window.addEventListener('hashchange', () => { closePlayer(); showView(); window.scrollTo({top:0}); });
 
+/* theme: automatico follows the device (or the Claude viewer's own choice), chiaro/scuro are kept in this browser */
+(() => {
+  const root = document.documentElement, b = $('#theme-b'), m = $('#theme-m');
+  const saved = store.get('oti-theme');
+  const hostTheme = saved === 'light' || saved === 'dark' ? null : root.getAttribute('data-theme');
+  const LBL = {auto:'automatico', light:'chiaro', dark:'scuro'};
+  const apply = t => {
+    if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+    else if (hostTheme) root.setAttribute('data-theme', hostTheme); else root.removeAttribute('data-theme');
+    b.dataset.mode = t; b.setAttribute('aria-label', 'Tema: ' + LBL[t]);
+    m.querySelectorAll('[data-theme-set]').forEach(x => x.setAttribute('aria-checked', String(x.dataset.themeSet === t)));
+  };
+  const open = v => { m.hidden = !v; b.setAttribute('aria-expanded', String(v)); if (v) (m.querySelector('[aria-checked="true"]') || m.querySelector('button')).focus(); };
+  apply(saved === 'light' || saved === 'dark' ? saved : 'auto');
+  b.addEventListener('click', e => { e.stopPropagation(); open(m.hidden); });
+  m.addEventListener('click', e => { const x = e.target.closest('[data-theme-set]'); if (!x) return; const t = x.dataset.themeSet; store.set('oti-theme', t); apply(t); open(false); b.focus(); });
+  m.addEventListener('keydown', e => { const items = [...m.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (e.key === 'Escape' || e.key === 'Tab'){ open(false); if (e.key === 'Escape') b.focus(); } });
+  document.addEventListener('click', e => { if (!m.hidden && !e.target.closest('#theme')) open(false); });
+})();
 document.querySelectorAll('.upd').forEach(el => { el.textContent = dmy(D.updated); });
 $('#ngames').textContent = D.win.games;
 renderOverview(); renderInjFilters(); renderInjuries(); renderPicker(); renderTeam(); renderImports(); renderRosa(); showView();
