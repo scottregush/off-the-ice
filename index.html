@@ -14,7 +14,17 @@
 <link rel="canonical" href="https://scottregush.github.io/off-the-ice/">
 <meta property="og:url" content="https://scottregush.github.io/off-the-ice/">
 <meta name="theme-color" content="#0C1F3A">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23C8102E' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23C8102E'/%3E%3C/svg%3E">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:image" content="https://scottregush.github.io/off-the-ice/og-image.png?v=2026-11-17">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Off the Ice: giocatori indisponibili in National League, aggiornato al 17.11.2026">
+<meta property="og:site_name" content="Off the Ice">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Off the Ice · Infortunati e indisponibili della National League">
+<meta name="twitter:description" content="Chi manca in National League: infortuni, squalifiche e stranieri in tribuna delle 14 squadre di hockey, con rientro previsto, ultime 5 partite e le tue rose per il fantahockey. Aggiornato due volte al giorno.">
+<meta name="twitter:image" content="https://scottregush.github.io/off-the-ice/og-image.png?v=2026-11-17">
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
 </head>
 <body>
@@ -91,8 +101,9 @@ p{margin:0}
 .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--navy);color:var(--on-navy)}
 .bar-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;padding-block:10px}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--on-navy)}
-.mark{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--red);display:grid;place-items:center}
-.mark::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--red)}
+.mark{flex:none;width:34px;height:34px;display:block}
+.mark .mk-ring{fill:none;stroke:var(--on-navy);stroke-width:4.5;stroke-linecap:round}
+.mark .mk-dot{fill:var(--red)}
 .bn{font-family:var(--font-display);font-weight:800;font-size:24px;line-height:1;letter-spacing:.03em;text-transform:uppercase}
 .bn b{font-weight:800}
 .tabs{display:flex;gap:2px;overflow-x:auto;max-width:100%;scrollbar-width:none}
@@ -596,7 +607,7 @@ footer b{color:var(--ink);font-weight:600}
 <header class="bar">
   <div class="wrap bar-in">
     <a class="brand" href="#panoramica" aria-label="Off the Ice, panoramica">
-      <span class="mark" aria-hidden="true"></span><span class="bn">Off the Ice</span>
+      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g class="mk-ring"><circle cx="32" cy="32" r="19"/><path d="M4 26.5h9.4M4 37.5h9.4M50.6 26.5H60M50.6 37.5H60"/></g><circle class="mk-dot" cx="32" cy="32" r="6"/></svg><span class="bn">Off the Ice</span>
     </a>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#panoramica" data-view="panoramica"><svg class="ti" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="2.5" y="5" width="15" height="10" rx="3"/><path d="M10 5v10"/><circle cx="10" cy="10" r="2.2"/></svg>Panoramica</a>

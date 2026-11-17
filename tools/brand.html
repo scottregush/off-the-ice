@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<style>
+@font-face{font-family:"Big Shoulders";font-weight:800;src:url(fonts/BigShoulders-800.woff2) format("woff2")}
+@font-face{font-family:"Instrument Sans";font-weight:400 700;src:url(fonts/InstrumentSans.woff2) format("woff2")}
+:root{--ice:#F8FBFD;--bg:#EEF3F7;--navy:#0C1F3A;--navy-2:#173252;--muted:#52647A;--on-navy:#F2F6FA;--on-navy-muted:#A9BCD2;--red:#C8102E;--blue:#1F56B3}
+*{box-sizing:border-box;margin:0}
+body{background:transparent}
+.disp{font-family:"Big Shoulders",sans-serif;font-weight:800;line-height:.9;text-transform:uppercase}
+.txt{font-family:"Instrument Sans",sans-serif}
+.frame{position:relative;overflow:hidden}
+.rink{position:absolute;inset:0;pointer-events:none}
+
+/* og image 1200x630 */
+#og{width:1200px;height:630px;background:var(--ice);color:var(--navy)}
+#og .content{position:absolute;left:76px;top:64px;right:340px;bottom:96px;display:flex;flex-direction:column;justify-content:space-between}
+#og .lockup{display:flex;align-items:center;gap:16px}
+#og .lockup .disp{font-size:52px;letter-spacing:.03em}
+#og .hero{display:flex;align-items:flex-end;gap:26px}
+#og .num{font-size:280px;color:var(--red);font-variant-numeric:tabular-nums;line-height:.78}
+#og .lbl{font-size:40px;font-weight:600;line-height:1.15;padding-bottom:10px;max-width:9.5em}
+#og .lbl span{display:block;color:var(--muted);font-weight:500;font-size:30px;margin-top:10px}
+#og .foot{position:absolute;left:0;right:0;bottom:0;height:72px;background:var(--navy);color:var(--on-navy-muted);display:flex;align-items:center;justify-content:space-between;padding:0 76px;font-size:24px;font-weight:500}
+#og .foot b{color:var(--on-navy);font-weight:600}
+
+/* app icon 512 */
+#icon{width:512px;height:512px;background:var(--navy);display:grid;place-items:center}
+
+/* brand sheet */
+#sheet{width:1400px;padding:56px;background:var(--bg);color:var(--navy);display:grid;grid-template-columns:1fr 1fr;gap:28px}
+#sheet .cell{border-radius:18px;padding:40px;min-height:280px;display:flex;flex-direction:column;justify-content:space-between;gap:24px}
+#sheet .k{font-size:18px;font-weight:600;color:var(--muted)}
+#sheet .on-navy .k{color:var(--on-navy-muted)}
+#sheet .big{display:flex;align-items:center;gap:22px}
+#sheet .big .disp{font-size:76px;letter-spacing:.03em}
+#sheet .sw{display:flex;gap:14px}
+#sheet .sw div{flex:1;border-radius:12px;height:120px;padding:14px;display:flex;flex-direction:column;justify-content:flex-end;font-size:16px;font-weight:600}
+#sheet .type .disp{font-size:64px}
+#sheet .type p{font-size:22px;line-height:1.5;max-width:30em}
+#sheet .wide{grid-column:1 / -1}
+</style>
+</head>
+<body>
+<template id="mark-tpl">
+  <svg viewBox="0 0 64 64" width="SIZE" height="SIZE" aria-hidden="true">
+    <g fill="none" stroke="RING" stroke-width="4.5" stroke-linecap="round"><circle cx="32" cy="32" r="19"/><path d="M4 26.5h9.4M4 37.5h9.4M50.6 26.5H60M50.6 37.5H60"/></g>
+    <circle cx="32" cy="32" r="6" fill="#C8102E"/>
+  </svg>
+</template>
+<template id="rink-tpl">
+  <svg class="rink" viewBox="0 0 1200 630" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="905" y1="0" x2="905" y2="630" stroke="#C8102E" stroke-width="14" opacity=".5"/>
+    <line x1="1110" y1="0" x2="1110" y2="630" stroke="#1F56B3" stroke-width="18" opacity=".36"/>
+    <circle cx="905" cy="279" r="178" fill="none" stroke="#C8102E" stroke-width="4" opacity=".42"/>
+    <circle cx="905" cy="279" r="11" fill="#1F56B3" opacity=".55"/>
+    <circle cx="1010" cy="110" r="9" fill="#1F56B3" opacity=".55"/>
+    <circle cx="1010" cy="448" r="9" fill="#1F56B3" opacity=".55"/>
+  </svg>
+</template>
+
+<div id="og" class="frame"></div>
+<div id="icon"></div>
+<div id="sheet"></div>
+
+<script>
+const P = new URLSearchParams(location.search);
+const total = P.get('total') || '–', imports = P.get('imports') || '–', date = P.get('date') || '';
+const mark = (size, ring = '#C8102E') => document.getElementById('mark-tpl').innerHTML.replaceAll('SIZE', size).replace('RING', ring);
+const rink = document.getElementById('rink-tpl').innerHTML;
+
+document.getElementById('og').innerHTML = rink + `
+  <div class="content txt">
+    <div class="lockup">${mark(64)}<span class="disp">Off the Ice</span></div>
+    <div class="hero"><span class="disp num">${total}</span>
+      <p class="lbl">giocatori indisponibili in National League<span>di cui ${imports} stranieri</span></p></div>
+  </div>
+  <div class="foot txt"><span><b>Infortuni, squalifiche e stranieri</b> delle 14 squadre</span><span>Aggiornato al ${date}</span></div>`;
+
+document.getElementById('icon').innerHTML = mark(360, '#F2F6FA');
+
+document.getElementById('sheet').innerHTML = `
+  <div class="cell" style="background:var(--ice)"><span class="k txt">Marchio su ghiaccio</span><div class="big">${mark(96)}<span class="disp">Off the Ice</span></div></div>
+  <div class="cell on-navy" style="background:var(--navy);color:var(--on-navy)"><span class="k txt">Marchio su blu notte</span><div class="big">${mark(96, '#F2F6FA')}<span class="disp">Off the Ice</span></div></div>
+  <div class="cell" style="background:#fff"><span class="k txt">Simbolo · il punto d'ingaggio con le tacche del cerchio</span><div class="big">${mark(150)}${mark(88)}${mark(44)}${mark(24)}</div></div>
+  <div class="cell" style="background:#fff"><span class="k txt">Colori</span><div class="sw txt">
+    <div style="background:#0C1F3A;color:#F2F6FA">Blu notte<br>#0C1F3A</div>
+    <div style="background:#C8102E;color:#fff">Linea rossa<br>#C8102E</div>
+    <div style="background:#1F56B3;color:#fff">Linea blu<br>#1F56B3</div>
+    <div style="background:#F8FBFD;color:#0C1F3A;box-shadow:inset 0 0 0 1px #C3D0DC">Ghiaccio<br>#F8FBFD</div></div></div>
+  <div class="cell wide type" style="background:#fff"><span class="k txt">Caratteri</span>
+    <div><div class="disp">Big Shoulders · titoli e numeri</div>
+    <p class="txt" style="margin-top:14px">Instrument Sans per il testo: chiaro, sobrio, leggibile anche piccolo. Il rosso si usa poco e solo per il segno forte: il simbolo e il numero principale.</p></div></div>`;
+</script>
+</body>
+</html>

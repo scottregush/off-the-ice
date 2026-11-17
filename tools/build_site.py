@@ -44,6 +44,8 @@ s = re.sub(r'<p><b>Le mie rose\.</b>.*?</p>',
 updated = re.search(r'"updated":"(\d{4}-\d{2}-\d{2})"', s)
 updated = updated.group(1) if updated else date.today().isoformat()
 
+y_, m_, d_ = updated.split('-')
+updated_it = f'{d_}.{m_}.{y_}'
 title = 'Off the Ice · Infortunati e indisponibili della National League'
 desc = ('Chi manca in National League: infortuni, squalifiche e stranieri in tribuna delle 14 squadre di hockey, '
         'con rientro previsto, ultime 5 partite e le tue rose per il fantahockey. Aggiornato due volte al giorno.')
@@ -64,7 +66,17 @@ head = f'''<!doctype html>
 {f'<link rel="canonical" href="{site_url}">' if site_url else ''}
 {f'<meta property="og:url" content="{site_url}">' if site_url else ''}
 <meta name="theme-color" content="#0C1F3A">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23C8102E' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23C8102E'/%3E%3C/svg%3E">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+{f'<meta property="og:image" content="{site_url}og-image.png?v={updated}">' if site_url else ''}
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Off the Ice: giocatori indisponibili in National League, aggiornato al {updated_it}">
+<meta property="og:site_name" content="Off the Ice">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc}">
+{f'<meta name="twitter:image" content="{site_url}og-image.png?v={updated}">' if site_url else ''}
 <style>:root{{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}}html{{scroll-padding-top:env(safe-area-inset-top,0px)}}body{{margin:0;padding:0}}img{{max-width:100%}}[hidden]:not([hidden=until-found i]){{display:none!important}}</style>
 </head>
 <body>
@@ -78,4 +90,12 @@ if site_url:
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
         f'  <url><loc>{site_url}</loc><lastmod>{updated}</lastmod><changefreq>daily</changefreq></url>\n</urlset>\n',
         encoding='utf8')
+mark = Path(__file__).resolve().parent.parent / 'assets' / 'brand' / 'mark.svg'
+if mark.exists() and mark.resolve() != (out / 'favicon.svg').resolve():
+    (out / 'favicon.svg').write_text(mark.read_text(encoding='utf8'), encoding='utf8')
+import subprocess, shutil
+maker = Path(__file__).resolve().parent / 'make_brand.js'
+if shutil.which('node') and maker.exists():
+    r = subprocess.run(['node', str(maker), str(out)], capture_output=True, text=True)
+    print(r.stdout.strip() or r.stderr.strip()[:400])
 print(f'built {out/"index.html"} · photos removed: {n_ph} · data date: {updated}')
