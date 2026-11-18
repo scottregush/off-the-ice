@@ -157,13 +157,12 @@ p{margin:0}
 .av-sm .dot{width:11px;height:11px}
 .av-lg .dot{width:18px;height:18px;border-width:3px}
 /* player figures: head crop in the circles, the whole figure on a card in the sheet and the heavy list */
-.has-fig .av-in{background:#E6EAEF}
 .av-in img.fig{inset:auto;left:50%;top:-2%;width:215%;height:auto;max-width:none;transform:translateX(-50%);object-fit:fill}
 .av.fc{width:var(--w);height:calc(var(--w) * 4 / 3)}
-.av.fc .av-in{border-radius:12px}
-.av.fc .av-in img.fig{inset:0;left:0;top:0;width:100%;height:100%;transform:none;object-fit:cover}
+.av.fc .av-in{border-radius:0;background:none;overflow:visible}
+.av.fc .ini{display:none}
+.av.fc .av-in img.fig{inset:0;left:0;top:0;width:100%;height:100%;transform:none;object-fit:contain}
 .av-lg.fc{--w:96px}.av-xl.fc{--w:120px}
-.dlg-head .av.fc .av-in{box-shadow:0 0 0 2px var(--navy-2)}
 .pbtn{background:none;border:0;padding:0;margin:0;text-align:left;cursor:pointer;color:inherit;min-width:0}
 .pbtn:hover .nm{text-decoration:underline;text-decoration-color:var(--blue);text-decoration-thickness:2px;text-underline-offset:3px}
 
