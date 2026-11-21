@@ -10,6 +10,8 @@ Sito: https://scottregush.github.io/off-the-ice/
 - Le rose dei visitatori restano nel loro browser (localStorage).
 - I dati vengono ricontrollati automaticamente due volte al giorno (mattino e dopo le partite serali) e il file viene aggiornato solo quando le fonti cambiano.
 - `tools/build_site.py` genera `index.html` dalla versione di lavoro della pagina: `python3 -I tools/build_site.py <pagina.html> . https://scottregush.github.io/off-the-ice`
+- Il sito si apre in inglese; ogni visitatore può scegliere italiano, francese o tedesco dal menu della lingua e la scelta resta nel suo browser. Anteprime social e meta tag sono in inglese.
+- `tools/site_fixes.css` contiene le correzioni di layout per il sito pubblico; `build_site.py` le aggiunge a ogni build, così non si perdono con gli aggiornamenti.
 
 ## Fonti
 

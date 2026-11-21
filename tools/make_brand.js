@@ -35,5 +35,5 @@ const path = require('path');
     await big.locator('#sheet').screenshot({ path: sheetOut });
   }
   await browser.close();
-  console.log(`brand images written · ${q.get('total')} indisponibili · ${q.get('date')}`);
+  console.log(`brand images written · ${q.get("total")} unavailable · ${q.get("date")}`);
 })();
