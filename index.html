@@ -579,6 +579,19 @@ footer b{color:var(--ink);font-weight:600}
 .more-b{color:var(--blue);font-weight:600;min-height:40px;padding:8px 0}
 @media (max-width:720px){ .tsheet > summary{margin:-16px;padding:16px} }
 
+/* ---------- transfer to another device ---------- */
+.xfer{display:flex;flex-wrap:wrap;gap:16px 20px;align-items:center;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:16px;max-width:760px;margin-top:4px}
+.xfer.imp{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.xf-qr{flex:none;width:184px;height:184px;padding:8px;background:#fff;border-radius:10px;border:1px solid var(--line);display:grid;place-items:center;text-align:center;font-size:12.5px;color:#52647A}
+.xf-qr svg{display:block;width:168px;height:168px}
+.xf-r{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.xf-t{display:flex;flex-direction:column;gap:3px}
+.xf-t b{font-weight:600;font-size:16px}
+.xf-t span{color:var(--muted);font-size:14px}
+.xf-l,.xf-b{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.xf-l input{flex:1 1 220px;min-width:0;background:var(--inset);color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:8px 12px;min-height:42px;font-size:13px}
+.xfer.imp .xf-t{flex:1 1 280px}
+@media (max-width:560px){.xf-qr{margin-inline:auto}}
 /* ---------- language switch ---------- */
 .lang{position:relative;flex:none}
 .bar-in .lang{margin-right:-16px}
@@ -789,6 +802,7 @@ footer b{color:var(--ink);font-weight:600}
         <ul id="r-res" class="res" role="listbox" aria-label="Giocatori trovati" hidden></ul>
       </div>
       <p id="r-msg" class="r-msg" aria-live="polite"></p>
+      <div id="r-xfer"></div>
     </div></div>
     <div class="wrap body" id="rosa-body"></div>
   </section>
@@ -1265,7 +1279,7 @@ function renderRosaHead(){
   el.innerHTML = `<div class="rtabs" role="group" aria-label="Le tue rose">${S.list.map(r => `<button class="rtab" data-roster="${esc(r.id)}" aria-pressed="${r.id === c.id}">${esc(r.name)}<span class="n">${r.ids.filter(id => BYID[id]).length}</span></button>`).join('')}${S.list.length < MAXROSE ? `<button class="rtab new" data-new-roster>+ Nuova rosa</button>` : ''}</div>
     ${renaming
       ? `<form class="rname" id="r-name-form"><label for="r-name" class="sr">Nome della rosa</label><input id="r-name" maxlength="30" value="${esc(c.name)}" autocomplete="off"><button class="btn lime" type="submit">Salva</button><button class="btn ghost" type="button" data-rename-no>Annulla</button></form>`
-      : `<div class="rtitle"><h1>${esc(c.name)}</h1><button class="btn ghost" data-rename>Rinomina</button></div>`}`;
+      : `<div class="rtitle"><h1>${esc(c.name)}</h1><button class="btn ghost" data-rename>Rinomina</button><button class="btn ghost" data-xfer aria-expanded="${xferOpen}">Trasferisci rose</button></div>`}`;
   $('#r-q').placeholder = `Aggiungi un giocatore a ${c.name}`;
 }
 function renderRosa(){
@@ -1349,7 +1363,7 @@ const rmsg = html => { $('#r-msg').innerHTML = html; };
 const UNDO = ' <button class="linkbtn" data-undo>Annulla</button>';
 const snap = () => JSON.stringify({list: S.list, active: S.active});
 const focusName = () => { const i = $('#r-name'); if (i){ i.focus(); i.select(); } };
-function refresh(){ renderRosa(); if (!$('#r-res').hidden) renderRes(); if (dlg.open && dlg.dataset.k) openPlayer(dlg.dataset.k); }
+function refresh(){ renderRosa(); if (xferOpen) renderXfer(); if (!$('#r-res').hidden) renderRes(); if (dlg.open && dlg.dataset.k) openPlayer(dlg.dataset.k); }
 function commit(){ confirmClear = confirmDelete = false; saveLocal(); pushCloud(); refresh(); }
 function addPlayer(id){
   const p = BYID[id], c = cur(); if (!p || c.ids.includes(id)) return;
@@ -1462,9 +1476,80 @@ async function initCloud(){
 }
 loadLocal(); ensure();
 
+/* ---------- transfer rosters to another device: a link (and QR code) that carries a copy ---------- */
+const SITE_URL = 'https://scottregush.github.io/off-the-ice/';
+let xferOpen = false, pendingImport = null;
+const b64e = s => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+function xferLink(){
+  const keep = S.list.filter(r => r.ids.length || S.list.length === 1);
+  const payload = JSON.stringify(keep.map(r => [r.name, r.ids.filter(id => BYID[id]).join('.')]));
+  const base = /^https?:$/.test(location.protocol) && !/claude|anthropic/.test(location.hostname) ? location.origin + location.pathname : SITE_URL;
+  return base + '#rosa?r=' + b64e(payload);
+}
+function readImportHash(){
+  const m = location.hash.match(/^#rosa\?r=([A-Za-z0-9_-]{2,20000})$/);
+  if (!m) return false;
+  try {
+    const raw = JSON.parse(b64d(m[1]));
+    const list = cleanList((Array.isArray(raw) ? raw : []).map(x => Array.isArray(x) ? {name: String(x[0] || ''), ids: String(x[1] || '').split('.').filter(id => /^\d{1,9}$/.test(id))} : null));
+    pendingImport = list && list.length ? list.map(r => ({...r, ids: r.ids.filter(id => BYID[id])})) : null;
+  } catch (e){ pendingImport = null; }
+  try { history.replaceState(null, '', location.pathname + location.search + '#rosa'); } catch (e){ location.hash = 'rosa'; }
+  renderXfer();
+  return true;
+}
+const sameList = (a, b) => JSON.stringify(a.map(r => [r.name, r.ids])) === JSON.stringify(b.map(r => [r.name, r.ids]));
+function doImport(mode){
+  const inc = pendingImport; pendingImport = null; if (!inc) return;
+  undoState = snap();
+  const fresh = inc.map(r => mkRoster(r.name, r.ids.slice(0, MAXR)));
+  if (mode === 'replace' || !S.list.some(r => r.ids.length)) S.list = fresh.slice(0, MAXROSE);
+  else S.list = S.list.concat(fresh).slice(0, MAXROSE);
+  S.active = fresh[0].id; ensure(); commit();
+  const n = inc.length;
+  rmsg((n === 1 ? 'Rosa importata.' : `${n} rose importate.`) + UNDO);
+  renderXfer();
+}
+function renderXfer(){
+  const el = $('#r-xfer'); if (!el) return;
+  if (pendingImport){
+    const nP = pendingImport.reduce((a, r) => a + r.ids.length, 0), nR = pendingImport.length;
+    if (sameList(pendingImport, S.list)){ pendingImport = null; el.innerHTML = ''; rmsg('Queste rose sono già su questo dispositivo.'); return; }
+    const mine = S.list.some(r => r.ids.length);
+    el.innerHTML = `<div class="xfer imp"><p class="xf-t"><b>${nR === 1 ? 'Una rosa da un altro dispositivo' : `${nR} rose da un altro dispositivo`}</b><span>${pendingImport.map(r => `${esc(r.name)} (${r.ids.length})`).join(' · ')}</span></p>
+      <div class="xf-b">${mine ? `<button class="btn lime" data-imp="add">Aggiungi alle mie rose</button><button class="btn" data-imp="replace">Sostituisci le mie rose</button>` : `<button class="btn lime" data-imp="replace">Importa</button>`}<button class="btn ghost" data-imp="no">Ignora</button></div></div>`;
+    return;
+  }
+  if (!xferOpen){ el.innerHTML = ''; return; }
+  const link = xferLink(), qrOk = link.length <= 2300;
+  el.innerHTML = `<div class="xfer"><div class="xf-qr" id="xf-qr" aria-hidden="true">${qrOk ? '' : '<span>Troppi giocatori per il codice QR: usa il link.</span>'}</div>
+    <div class="xf-r"><p class="xf-t"><b>Porta le rose su un altro dispositivo</b><span>Inquadra il codice con la fotocamera dell'altro dispositivo, oppure mandagli il link. Le rose vengono copiate lì; le modifiche successive non si sincronizzano da sole.</span></p>
+    <div class="xf-l"><label for="xf-link" class="sr">Link per l'altro dispositivo</label><input id="xf-link" readonly value="${esc(link)}"><button class="btn lime" data-xf-copy>Copia link</button>${navigator.share ? '<button class="btn" data-xf-share>Condividi</button>' : ''}<button class="btn ghost" data-xf-close>Chiudi</button></div></div></div>`;
+  if (qrOk){
+    const box = $('#xf-qr');
+    try { const q = window.qrcode(0, 'L'); q.addData(link); q.make(); box.innerHTML = q.createSvgTag({cellSize: 4, margin: 0, scalable: true}); }
+    catch (e){ box.innerHTML = '<span>Codice QR non disponibile: usa il link.</span>'; }
+  }
+}
+document.addEventListener('click', async e => {
+  const imp = e.target.closest('[data-imp]');
+  if (imp){ const m = imp.dataset.imp; if (m === 'no'){ pendingImport = null; renderXfer(); } else doImport(m); return; }
+  if (e.target.closest('[data-xfer]')){ xferOpen = !xferOpen; renderXfer(); if (xferOpen) $('#r-xfer').scrollIntoView({block:'nearest', behavior:'smooth'}); return; }
+  if (e.target.closest('[data-xf-close]')){ xferOpen = false; renderXfer(); return; }
+  if (e.target.closest('[data-xf-copy]')){
+    const inp = $('#xf-link'), link = inp.value;
+    try { await navigator.clipboard.writeText(link); rmsg('Link copiato.'); }
+    catch (err){ inp.focus(); inp.select(); try { document.execCommand('copy'); rmsg('Link copiato.'); } catch (e2){ rmsg('Seleziona il link e copialo.'); } }
+    return;
+  }
+  if (e.target.closest('[data-xf-share]')){ try { await navigator.share({title: 'Off the Ice', url: $('#xf-link').value}); } catch (err){} return; }
+});
+
 /* ---------- routing & events ---------- */
 const VIEWS = ['panoramica','infortuni','squadra','stranieri','rosa'];
 function showView(){
+  readImportHash();
   const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'panoramica';
   VIEWS.forEach(k => { $('#view-' + k).hidden = k !== v; });
   document.querySelectorAll('.tabs a').forEach(a => { if (a.dataset.view === v) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
@@ -1565,10 +1650,1626 @@ $('#ngames').textContent = D.win.games;
 renderOverview(); renderInjFilters(); renderInjuries(); renderPicker(); renderTeam(); renderImports(); renderRosa(); showView();
 initCloud();
 </script>
+<script id="qrgen">
+/* QR Code Generator for JavaScript, (c) 2009 Kazuhiko Arase, MIT license. "QR Code" is a registered trademark of DENSO WAVE INCORPORATED. */
+var qrcode = function() {
+/**
+* qrcode
+* @param typeNumber 1 to 40
+* @param errorCorrectionLevel 'L','M','Q','H'
+*/
+var qrcode = function(typeNumber, errorCorrectionLevel) {
+var PAD0 = 0xEC;
+var PAD1 = 0x11;
+var _typeNumber = typeNumber;
+var _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+var _modules = null;
+var _moduleCount = 0;
+var _dataCache = null;
+var _dataList = [];
+var _this = {};
+var makeImpl = function(test, maskPattern) {
+_moduleCount = _typeNumber * 4 + 17;
+_modules = function(moduleCount) {
+var modules = new Array(moduleCount);
+for (var row = 0; row < moduleCount; row += 1) {
+modules[row] = new Array(moduleCount);
+for (var col = 0; col < moduleCount; col += 1) {
+modules[row][col] = null;
+}
+}
+return modules;
+}(_moduleCount);
+setupPositionProbePattern(0, 0);
+setupPositionProbePattern(_moduleCount - 7, 0);
+setupPositionProbePattern(0, _moduleCount - 7);
+setupPositionAdjustPattern();
+setupTimingPattern();
+setupTypeInfo(test, maskPattern);
+if (_typeNumber >= 7) {
+setupTypeNumber(test);
+}
+if (_dataCache == null) {
+_dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+}
+mapData(_dataCache, maskPattern);
+};
+var setupPositionProbePattern = function(row, col) {
+for (var r = -1; r <= 7; r += 1) {
+if (row + r <= -1 || _moduleCount <= row + r) continue;
+for (var c = -1; c <= 7; c += 1) {
+if (col + c <= -1 || _moduleCount <= col + c) continue;
+if ( (0 <= r && r <= 6 && (c == 0 || c == 6) )
+|| (0 <= c && c <= 6 && (r == 0 || r == 6) )
+|| (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+_modules[row + r][col + c] = true;
+} else {
+_modules[row + r][col + c] = false;
+}
+}
+}
+};
+var getBestMaskPattern = function() {
+var minLostPoint = 0;
+var pattern = 0;
+for (var i = 0; i < 8; i += 1) {
+makeImpl(true, i);
+var lostPoint = QRUtil.getLostPoint(_this);
+if (i == 0 || minLostPoint > lostPoint) {
+minLostPoint = lostPoint;
+pattern = i;
+}
+}
+return pattern;
+};
+var setupTimingPattern = function() {
+for (var r = 8; r < _moduleCount - 8; r += 1) {
+if (_modules[r][6] != null) {
+continue;
+}
+_modules[r][6] = (r % 2 == 0);
+}
+for (var c = 8; c < _moduleCount - 8; c += 1) {
+if (_modules[6][c] != null) {
+continue;
+}
+_modules[6][c] = (c % 2 == 0);
+}
+};
+var setupPositionAdjustPattern = function() {
+var pos = QRUtil.getPatternPosition(_typeNumber);
+for (var i = 0; i < pos.length; i += 1) {
+for (var j = 0; j < pos.length; j += 1) {
+var row = pos[i];
+var col = pos[j];
+if (_modules[row][col] != null) {
+continue;
+}
+for (var r = -2; r <= 2; r += 1) {
+for (var c = -2; c <= 2; c += 1) {
+if (r == -2 || r == 2 || c == -2 || c == 2
+|| (r == 0 && c == 0) ) {
+_modules[row + r][col + c] = true;
+} else {
+_modules[row + r][col + c] = false;
+}
+}
+}
+}
+}
+};
+var setupTypeNumber = function(test) {
+var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+for (var i = 0; i < 18; i += 1) {
+var mod = (!test && ( (bits >> i) & 1) == 1);
+_modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+}
+for (var i = 0; i < 18; i += 1) {
+var mod = (!test && ( (bits >> i) & 1) == 1);
+_modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+}
+};
+var setupTypeInfo = function(test, maskPattern) {
+var data = (_errorCorrectionLevel << 3) | maskPattern;
+var bits = QRUtil.getBCHTypeInfo(data);
+for (var i = 0; i < 15; i += 1) {
+var mod = (!test && ( (bits >> i) & 1) == 1);
+if (i < 6) {
+_modules[i][8] = mod;
+} else if (i < 8) {
+_modules[i + 1][8] = mod;
+} else {
+_modules[_moduleCount - 15 + i][8] = mod;
+}
+}
+for (var i = 0; i < 15; i += 1) {
+var mod = (!test && ( (bits >> i) & 1) == 1);
+if (i < 8) {
+_modules[8][_moduleCount - i - 1] = mod;
+} else if (i < 9) {
+_modules[8][15 - i - 1 + 1] = mod;
+} else {
+_modules[8][15 - i - 1] = mod;
+}
+}
+_modules[_moduleCount - 8][8] = (!test);
+};
+var mapData = function(data, maskPattern) {
+var inc = -1;
+var row = _moduleCount - 1;
+var bitIndex = 7;
+var byteIndex = 0;
+var maskFunc = QRUtil.getMaskFunction(maskPattern);
+for (var col = _moduleCount - 1; col > 0; col -= 2) {
+if (col == 6) col -= 1;
+while (true) {
+for (var c = 0; c < 2; c += 1) {
+if (_modules[row][col - c] == null) {
+var dark = false;
+if (byteIndex < data.length) {
+dark = ( ( (data[byteIndex] >>> bitIndex) & 1) == 1);
+}
+var mask = maskFunc(row, col - c);
+if (mask) {
+dark = !dark;
+}
+_modules[row][col - c] = dark;
+bitIndex -= 1;
+if (bitIndex == -1) {
+byteIndex += 1;
+bitIndex = 7;
+}
+}
+}
+row += inc;
+if (row < 0 || _moduleCount <= row) {
+row -= inc;
+inc = -inc;
+break;
+}
+}
+}
+};
+var createBytes = function(buffer, rsBlocks) {
+var offset = 0;
+var maxDcCount = 0;
+var maxEcCount = 0;
+var dcdata = new Array(rsBlocks.length);
+var ecdata = new Array(rsBlocks.length);
+for (var r = 0; r < rsBlocks.length; r += 1) {
+var dcCount = rsBlocks[r].dataCount;
+var ecCount = rsBlocks[r].totalCount - dcCount;
+maxDcCount = Math.max(maxDcCount, dcCount);
+maxEcCount = Math.max(maxEcCount, ecCount);
+dcdata[r] = new Array(dcCount);
+for (var i = 0; i < dcdata[r].length; i += 1) {
+dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
+}
+offset += dcCount;
+var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+var rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+var modPoly = rawPoly.mod(rsPoly);
+ecdata[r] = new Array(rsPoly.getLength() - 1);
+for (var i = 0; i < ecdata[r].length; i += 1) {
+var modIndex = i + modPoly.getLength() - ecdata[r].length;
+ecdata[r][i] = (modIndex >= 0)? modPoly.getAt(modIndex) : 0;
+}
+}
+var totalCodeCount = 0;
+for (var i = 0; i < rsBlocks.length; i += 1) {
+totalCodeCount += rsBlocks[i].totalCount;
+}
+var data = new Array(totalCodeCount);
+var index = 0;
+for (var i = 0; i < maxDcCount; i += 1) {
+for (var r = 0; r < rsBlocks.length; r += 1) {
+if (i < dcdata[r].length) {
+data[index] = dcdata[r][i];
+index += 1;
+}
+}
+}
+for (var i = 0; i < maxEcCount; i += 1) {
+for (var r = 0; r < rsBlocks.length; r += 1) {
+if (i < ecdata[r].length) {
+data[index] = ecdata[r][i];
+index += 1;
+}
+}
+}
+return data;
+};
+var createData = function(typeNumber, errorCorrectionLevel, dataList) {
+var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel);
+var buffer = qrBitBuffer();
+for (var i = 0; i < dataList.length; i += 1) {
+var data = dataList[i];
+buffer.put(data.getMode(), 4);
+buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+data.write(buffer);
+}
+var totalDataCount = 0;
+for (var i = 0; i < rsBlocks.length; i += 1) {
+totalDataCount += rsBlocks[i].dataCount;
+}
+if (buffer.getLengthInBits() > totalDataCount * 8) {
+throw 'code length overflow. ('
++ buffer.getLengthInBits()
++ '>'
++ totalDataCount * 8
++ ')';
+}
+if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+buffer.put(0, 4);
+}
+while (buffer.getLengthInBits() % 8 != 0) {
+buffer.putBit(false);
+}
+while (true) {
+if (buffer.getLengthInBits() >= totalDataCount * 8) {
+break;
+}
+buffer.put(PAD0, 8);
+if (buffer.getLengthInBits() >= totalDataCount * 8) {
+break;
+}
+buffer.put(PAD1, 8);
+}
+return createBytes(buffer, rsBlocks);
+};
+_this.addData = function(data, mode) {
+mode = mode || 'Byte';
+var newData = null;
+switch(mode) {
+case 'Numeric' :
+newData = qrNumber(data);
+break;
+case 'Alphanumeric' :
+newData = qrAlphaNum(data);
+break;
+case 'Byte' :
+newData = qr8BitByte(data);
+break;
+case 'Kanji' :
+newData = qrKanji(data);
+break;
+default :
+throw 'mode:' + mode;
+}
+_dataList.push(newData);
+_dataCache = null;
+};
+_this.isDark = function(row, col) {
+if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+throw row + ',' + col;
+}
+return _modules[row][col];
+};
+_this.getModuleCount = function() {
+return _moduleCount;
+};
+_this.make = function() {
+if (_typeNumber < 1) {
+var typeNumber = 1;
+for (; typeNumber < 40; typeNumber++) {
+var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, _errorCorrectionLevel);
+var buffer = qrBitBuffer();
+for (var i = 0; i < _dataList.length; i++) {
+var data = _dataList[i];
+buffer.put(data.getMode(), 4);
+buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+data.write(buffer);
+}
+var totalDataCount = 0;
+for (var i = 0; i < rsBlocks.length; i++) {
+totalDataCount += rsBlocks[i].dataCount;
+}
+if (buffer.getLengthInBits() <= totalDataCount * 8) {
+break;
+}
+}
+_typeNumber = typeNumber;
+}
+makeImpl(false, getBestMaskPattern() );
+};
+_this.createTableTag = function(cellSize, margin) {
+cellSize = cellSize || 2;
+margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+var qrHtml = '';
+qrHtml += '<table style="';
+qrHtml += ' border-width: 0px; border-style: none;';
+qrHtml += ' border-collapse: collapse;';
+qrHtml += ' padding: 0px; margin: ' + margin + 'px;';
+qrHtml += '">';
+qrHtml += '<tbody>';
+for (var r = 0; r < _this.getModuleCount(); r += 1) {
+qrHtml += '<tr>';
+for (var c = 0; c < _this.getModuleCount(); c += 1) {
+qrHtml += '<td style="';
+qrHtml += ' border-width: 0px; border-style: none;';
+qrHtml += ' border-collapse: collapse;';
+qrHtml += ' padding: 0px; margin: 0px;';
+qrHtml += ' width: ' + cellSize + 'px;';
+qrHtml += ' height: ' + cellSize + 'px;';
+qrHtml += ' background-color: ';
+qrHtml += _this.isDark(r, c)? '#000000' : '#ffffff';
+qrHtml += ';';
+qrHtml += '"/>';
+}
+qrHtml += '</tr>';
+}
+qrHtml += '</tbody>';
+qrHtml += '</table>';
+return qrHtml;
+};
+_this.createSvgTag = function(cellSize, margin, alt, title) {
+var opts = {};
+if (typeof arguments[0] == 'object') {
+opts = arguments[0];
+cellSize = opts.cellSize;
+margin = opts.margin;
+alt = opts.alt;
+title = opts.title;
+}
+cellSize = cellSize || 2;
+margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+alt = (typeof alt === 'string') ? {text: alt} : alt || {};
+alt.text = alt.text || null;
+alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
+title = (typeof title === 'string') ? {text: title} : title || {};
+title.text = title.text || null;
+title.id = (title.text) ? title.id || 'qrcode-title' : null;
+var size = _this.getModuleCount() * cellSize + margin * 2;
+var c, mc, r, mr, qrSvg='', rect;
+rect = 'l' + cellSize + ',0 0,' + cellSize +
+' -' + cellSize + ',0 0,-' + cellSize + 'z ';
+qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : '';
+qrSvg += ' viewBox="0 0 ' + size + ' ' + size + '" ';
+qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+qrSvg += (title.text || alt.text) ? ' role="img" aria-labelledby="' +
+escapeXml([title.id, alt.id].join(' ').trim() ) + '"' : '';
+qrSvg += '>';
+qrSvg += (title.text) ? '<title id="' + escapeXml(title.id) + '">' +
+escapeXml(title.text) + '</title>' : '';
+qrSvg += (alt.text) ? '<description id="' + escapeXml(alt.id) + '">' +
+escapeXml(alt.text) + '</description>' : '';
+qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+qrSvg += '<path d="';
+for (r = 0; r < _this.getModuleCount(); r += 1) {
+mr = r * cellSize + margin;
+for (c = 0; c < _this.getModuleCount(); c += 1) {
+if (_this.isDark(r, c) ) {
+mc = c*cellSize+margin;
+qrSvg += 'M' + mc + ',' + mr + rect;
+}
+}
+}
+qrSvg += '" stroke="transparent" fill="black"/>';
+qrSvg += '</svg>';
+return qrSvg;
+};
+_this.createDataURL = function(cellSize, margin) {
+cellSize = cellSize || 2;
+margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+var size = _this.getModuleCount() * cellSize + margin * 2;
+var min = margin;
+var max = size - margin;
+return createDataURL(size, size, function(x, y) {
+if (min <= x && x < max && min <= y && y < max) {
+var c = Math.floor( (x - min) / cellSize);
+var r = Math.floor( (y - min) / cellSize);
+return _this.isDark(r, c)? 0 : 1;
+} else {
+return 1;
+}
+} );
+};
+_this.createImgTag = function(cellSize, margin, alt) {
+cellSize = cellSize || 2;
+margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+var size = _this.getModuleCount() * cellSize + margin * 2;
+var img = '';
+img += '<img';
+img += '\u0020src="';
+img += _this.createDataURL(cellSize, margin);
+img += '"';
+img += '\u0020width="';
+img += size;
+img += '"';
+img += '\u0020height="';
+img += size;
+img += '"';
+if (alt) {
+img += '\u0020alt="';
+img += escapeXml(alt);
+img += '"';
+}
+img += '/>';
+return img;
+};
+var escapeXml = function(s) {
+var escaped = '';
+for (var i = 0; i < s.length; i += 1) {
+var c = s.charAt(i);
+switch(c) {
+case '<': escaped += '&lt;'; break;
+case '>': escaped += '&gt;'; break;
+case '&': escaped += '&amp;'; break;
+case '"': escaped += '&quot;'; break;
+default : escaped += c; break;
+}
+}
+return escaped;
+};
+var _createHalfASCII = function(margin) {
+var cellSize = 1;
+margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+var size = _this.getModuleCount() * cellSize + margin * 2;
+var min = margin;
+var max = size - margin;
+var y, x, r1, r2, p;
+var blocks = {
+'██': '█',
+'█ ': '▀',
+' █': '▄',
+'  ': ' '
+};
+var blocksLastLineNoMargin = {
+'██': '▀',
+'█ ': '▀',
+' █': ' ',
+'  ': ' '
+};
+var ascii = '';
+for (y = 0; y < size; y += 2) {
+r1 = Math.floor((y - min) / cellSize);
+r2 = Math.floor((y + 1 - min) / cellSize);
+for (x = 0; x < size; x += 1) {
+p = '█';
+if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+p = ' ';
+}
+if (min <= x && x < max && min <= y+1 && y+1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+p += ' ';
+}
+else {
+p += '█';
+}
+ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
+}
+ascii += '\n';
+}
+if (size % 2 && margin > 0) {
+return ascii.substring(0, ascii.length - size - 1) + Array(size+1).join('▀');
+}
+return ascii.substring(0, ascii.length-1);
+};
+_this.createASCII = function(cellSize, margin) {
+cellSize = cellSize || 1;
+if (cellSize < 2) {
+return _createHalfASCII(margin);
+}
+cellSize -= 1;
+margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+var size = _this.getModuleCount() * cellSize + margin * 2;
+var min = margin;
+var max = size - margin;
+var y, x, r, p;
+var white = Array(cellSize+1).join('██');
+var black = Array(cellSize+1).join('  ');
+var ascii = '';
+var line = '';
+for (y = 0; y < size; y += 1) {
+r = Math.floor( (y - min) / cellSize);
+line = '';
+for (x = 0; x < size; x += 1) {
+p = 1;
+if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+p = 0;
+}
+line += p ? white : black;
+}
+for (r = 0; r < cellSize; r += 1) {
+ascii += line + '\n';
+}
+}
+return ascii.substring(0, ascii.length-1);
+};
+_this.renderTo2dContext = function(context, cellSize) {
+cellSize = cellSize || 2;
+var length = _this.getModuleCount();
+for (var row = 0; row < length; row++) {
+for (var col = 0; col < length; col++) {
+context.fillStyle = _this.isDark(row, col) ? 'black' : 'white';
+context.fillRect(row * cellSize, col * cellSize, cellSize, cellSize);
+}
+}
+}
+return _this;
+};
+qrcode.stringToBytesFuncs = {
+'default' : function(s) {
+var bytes = [];
+for (var i = 0; i < s.length; i += 1) {
+var c = s.charCodeAt(i);
+bytes.push(c & 0xff);
+}
+return bytes;
+}
+};
+qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
+/**
+* @param unicodeData base64 string of byte array.
+* [16bit Unicode],[16bit Bytes], ...
+* @param numChars
+*/
+qrcode.createStringToBytes = function(unicodeData, numChars) {
+var unicodeMap = function() {
+var bin = base64DecodeInputStream(unicodeData);
+var read = function() {
+var b = bin.read();
+if (b == -1) throw 'eof';
+return b;
+};
+var count = 0;
+var unicodeMap = {};
+while (true) {
+var b0 = bin.read();
+if (b0 == -1) break;
+var b1 = read();
+var b2 = read();
+var b3 = read();
+var k = String.fromCharCode( (b0 << 8) | b1);
+var v = (b2 << 8) | b3;
+unicodeMap[k] = v;
+count += 1;
+}
+if (count != numChars) {
+throw count + ' != ' + numChars;
+}
+return unicodeMap;
+}();
+var unknownChar = '?'.charCodeAt(0);
+return function(s) {
+var bytes = [];
+for (var i = 0; i < s.length; i += 1) {
+var c = s.charCodeAt(i);
+if (c < 128) {
+bytes.push(c);
+} else {
+var b = unicodeMap[s.charAt(i)];
+if (typeof b == 'number') {
+if ( (b & 0xff) == b) {
+bytes.push(b);
+} else {
+bytes.push(b >>> 8);
+bytes.push(b & 0xff);
+}
+} else {
+bytes.push(unknownChar);
+}
+}
+}
+return bytes;
+};
+};
+var QRMode = {
+MODE_NUMBER :    1 << 0,
+MODE_ALPHA_NUM : 1 << 1,
+MODE_8BIT_BYTE : 1 << 2,
+MODE_KANJI :     1 << 3
+};
+var QRErrorCorrectionLevel = {
+L : 1,
+M : 0,
+Q : 3,
+H : 2
+};
+var QRMaskPattern = {
+PATTERN000 : 0,
+PATTERN001 : 1,
+PATTERN010 : 2,
+PATTERN011 : 3,
+PATTERN100 : 4,
+PATTERN101 : 5,
+PATTERN110 : 6,
+PATTERN111 : 7
+};
+var QRUtil = function() {
+var PATTERN_POSITION_TABLE = [
+[],
+[6, 18],
+[6, 22],
+[6, 26],
+[6, 30],
+[6, 34],
+[6, 22, 38],
+[6, 24, 42],
+[6, 26, 46],
+[6, 28, 50],
+[6, 30, 54],
+[6, 32, 58],
+[6, 34, 62],
+[6, 26, 46, 66],
+[6, 26, 48, 70],
+[6, 26, 50, 74],
+[6, 30, 54, 78],
+[6, 30, 56, 82],
+[6, 30, 58, 86],
+[6, 34, 62, 90],
+[6, 28, 50, 72, 94],
+[6, 26, 50, 74, 98],
+[6, 30, 54, 78, 102],
+[6, 28, 54, 80, 106],
+[6, 32, 58, 84, 110],
+[6, 30, 58, 86, 114],
+[6, 34, 62, 90, 118],
+[6, 26, 50, 74, 98, 122],
+[6, 30, 54, 78, 102, 126],
+[6, 26, 52, 78, 104, 130],
+[6, 30, 56, 82, 108, 134],
+[6, 34, 60, 86, 112, 138],
+[6, 30, 58, 86, 114, 142],
+[6, 34, 62, 90, 118, 146],
+[6, 30, 54, 78, 102, 126, 150],
+[6, 24, 50, 76, 102, 128, 154],
+[6, 28, 54, 80, 106, 132, 158],
+[6, 32, 58, 84, 110, 136, 162],
+[6, 26, 54, 82, 110, 138, 166],
+[6, 30, 58, 86, 114, 142, 170]
+];
+var G15 = (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0);
+var G18 = (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0);
+var G15_MASK = (1 << 14) | (1 << 12) | (1 << 10) | (1 << 4) | (1 << 1);
+var _this = {};
+var getBCHDigit = function(data) {
+var digit = 0;
+while (data != 0) {
+digit += 1;
+data >>>= 1;
+}
+return digit;
+};
+_this.getBCHTypeInfo = function(data) {
+var d = data << 10;
+while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15) ) );
+}
+return ( (data << 10) | d) ^ G15_MASK;
+};
+_this.getBCHTypeNumber = function(data) {
+var d = data << 12;
+while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18) ) );
+}
+return (data << 12) | d;
+};
+_this.getPatternPosition = function(typeNumber) {
+return PATTERN_POSITION_TABLE[typeNumber - 1];
+};
+_this.getMaskFunction = function(maskPattern) {
+switch (maskPattern) {
+case QRMaskPattern.PATTERN000 :
+return function(i, j) { return (i + j) % 2 == 0; };
+case QRMaskPattern.PATTERN001 :
+return function(i, j) { return i % 2 == 0; };
+case QRMaskPattern.PATTERN010 :
+return function(i, j) { return j % 3 == 0; };
+case QRMaskPattern.PATTERN011 :
+return function(i, j) { return (i + j) % 3 == 0; };
+case QRMaskPattern.PATTERN100 :
+return function(i, j) { return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 == 0; };
+case QRMaskPattern.PATTERN101 :
+return function(i, j) { return (i * j) % 2 + (i * j) % 3 == 0; };
+case QRMaskPattern.PATTERN110 :
+return function(i, j) { return ( (i * j) % 2 + (i * j) % 3) % 2 == 0; };
+case QRMaskPattern.PATTERN111 :
+return function(i, j) { return ( (i * j) % 3 + (i + j) % 2) % 2 == 0; };
+default :
+throw 'bad maskPattern:' + maskPattern;
+}
+};
+_this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+var a = qrPolynomial([1], 0);
+for (var i = 0; i < errorCorrectLength; i += 1) {
+a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0) );
+}
+return a;
+};
+_this.getLengthInBits = function(mode, type) {
+if (1 <= type && type < 10) {
+switch(mode) {
+case QRMode.MODE_NUMBER    : return 10;
+case QRMode.MODE_ALPHA_NUM : return 9;
+case QRMode.MODE_8BIT_BYTE : return 8;
+case QRMode.MODE_KANJI     : return 8;
+default :
+throw 'mode:' + mode;
+}
+} else if (type < 27) {
+switch(mode) {
+case QRMode.MODE_NUMBER    : return 12;
+case QRMode.MODE_ALPHA_NUM : return 11;
+case QRMode.MODE_8BIT_BYTE : return 16;
+case QRMode.MODE_KANJI     : return 10;
+default :
+throw 'mode:' + mode;
+}
+} else if (type < 41) {
+switch(mode) {
+case QRMode.MODE_NUMBER    : return 14;
+case QRMode.MODE_ALPHA_NUM : return 13;
+case QRMode.MODE_8BIT_BYTE : return 16;
+case QRMode.MODE_KANJI     : return 12;
+default :
+throw 'mode:' + mode;
+}
+} else {
+throw 'type:' + type;
+}
+};
+_this.getLostPoint = function(qrcode) {
+var moduleCount = qrcode.getModuleCount();
+var lostPoint = 0;
+for (var row = 0; row < moduleCount; row += 1) {
+for (var col = 0; col < moduleCount; col += 1) {
+var sameCount = 0;
+var dark = qrcode.isDark(row, col);
+for (var r = -1; r <= 1; r += 1) {
+if (row + r < 0 || moduleCount <= row + r) {
+continue;
+}
+for (var c = -1; c <= 1; c += 1) {
+if (col + c < 0 || moduleCount <= col + c) {
+continue;
+}
+if (r == 0 && c == 0) {
+continue;
+}
+if (dark == qrcode.isDark(row + r, col + c) ) {
+sameCount += 1;
+}
+}
+}
+if (sameCount > 5) {
+lostPoint += (3 + sameCount - 5);
+}
+}
+};
+for (var row = 0; row < moduleCount - 1; row += 1) {
+for (var col = 0; col < moduleCount - 1; col += 1) {
+var count = 0;
+if (qrcode.isDark(row, col) ) count += 1;
+if (qrcode.isDark(row + 1, col) ) count += 1;
+if (qrcode.isDark(row, col + 1) ) count += 1;
+if (qrcode.isDark(row + 1, col + 1) ) count += 1;
+if (count == 0 || count == 4) {
+lostPoint += 3;
+}
+}
+}
+for (var row = 0; row < moduleCount; row += 1) {
+for (var col = 0; col < moduleCount - 6; col += 1) {
+if (qrcode.isDark(row, col)
+&& !qrcode.isDark(row, col + 1)
+&&  qrcode.isDark(row, col + 2)
+&&  qrcode.isDark(row, col + 3)
+&&  qrcode.isDark(row, col + 4)
+&& !qrcode.isDark(row, col + 5)
+&&  qrcode.isDark(row, col + 6) ) {
+lostPoint += 40;
+}
+}
+}
+for (var col = 0; col < moduleCount; col += 1) {
+for (var row = 0; row < moduleCount - 6; row += 1) {
+if (qrcode.isDark(row, col)
+&& !qrcode.isDark(row + 1, col)
+&&  qrcode.isDark(row + 2, col)
+&&  qrcode.isDark(row + 3, col)
+&&  qrcode.isDark(row + 4, col)
+&& !qrcode.isDark(row + 5, col)
+&&  qrcode.isDark(row + 6, col) ) {
+lostPoint += 40;
+}
+}
+}
+var darkCount = 0;
+for (var col = 0; col < moduleCount; col += 1) {
+for (var row = 0; row < moduleCount; row += 1) {
+if (qrcode.isDark(row, col) ) {
+darkCount += 1;
+}
+}
+}
+var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+lostPoint += ratio * 10;
+return lostPoint;
+};
+return _this;
+}();
+var QRMath = function() {
+var EXP_TABLE = new Array(256);
+var LOG_TABLE = new Array(256);
+for (var i = 0; i < 8; i += 1) {
+EXP_TABLE[i] = 1 << i;
+}
+for (var i = 8; i < 256; i += 1) {
+EXP_TABLE[i] = EXP_TABLE[i - 4]
+^ EXP_TABLE[i - 5]
+^ EXP_TABLE[i - 6]
+^ EXP_TABLE[i - 8];
+}
+for (var i = 0; i < 255; i += 1) {
+LOG_TABLE[EXP_TABLE[i] ] = i;
+}
+var _this = {};
+_this.glog = function(n) {
+if (n < 1) {
+throw 'glog(' + n + ')';
+}
+return LOG_TABLE[n];
+};
+_this.gexp = function(n) {
+while (n < 0) {
+n += 255;
+}
+while (n >= 256) {
+n -= 255;
+}
+return EXP_TABLE[n];
+};
+return _this;
+}();
+function qrPolynomial(num, shift) {
+if (typeof num.length == 'undefined') {
+throw num.length + '/' + shift;
+}
+var _num = function() {
+var offset = 0;
+while (offset < num.length && num[offset] == 0) {
+offset += 1;
+}
+var _num = new Array(num.length - offset + shift);
+for (var i = 0; i < num.length - offset; i += 1) {
+_num[i] = num[i + offset];
+}
+return _num;
+}();
+var _this = {};
+_this.getAt = function(index) {
+return _num[index];
+};
+_this.getLength = function() {
+return _num.length;
+};
+_this.multiply = function(e) {
+var num = new Array(_this.getLength() + e.getLength() - 1);
+for (var i = 0; i < _this.getLength(); i += 1) {
+for (var j = 0; j < e.getLength(); j += 1) {
+num[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i) ) + QRMath.glog(e.getAt(j) ) );
+}
+}
+return qrPolynomial(num, 0);
+};
+_this.mod = function(e) {
+if (_this.getLength() - e.getLength() < 0) {
+return _this;
+}
+var ratio = QRMath.glog(_this.getAt(0) ) - QRMath.glog(e.getAt(0) );
+var num = new Array(_this.getLength() );
+for (var i = 0; i < _this.getLength(); i += 1) {
+num[i] = _this.getAt(i);
+}
+for (var i = 0; i < e.getLength(); i += 1) {
+num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
+}
+return qrPolynomial(num, 0).mod(e);
+};
+return _this;
+};
+var QRRSBlock = function() {
+var RS_BLOCK_TABLE = [
+[1, 26, 19],
+[1, 26, 16],
+[1, 26, 13],
+[1, 26, 9],
+[1, 44, 34],
+[1, 44, 28],
+[1, 44, 22],
+[1, 44, 16],
+[1, 70, 55],
+[1, 70, 44],
+[2, 35, 17],
+[2, 35, 13],
+[1, 100, 80],
+[2, 50, 32],
+[2, 50, 24],
+[4, 25, 9],
+[1, 134, 108],
+[2, 67, 43],
+[2, 33, 15, 2, 34, 16],
+[2, 33, 11, 2, 34, 12],
+[2, 86, 68],
+[4, 43, 27],
+[4, 43, 19],
+[4, 43, 15],
+[2, 98, 78],
+[4, 49, 31],
+[2, 32, 14, 4, 33, 15],
+[4, 39, 13, 1, 40, 14],
+[2, 121, 97],
+[2, 60, 38, 2, 61, 39],
+[4, 40, 18, 2, 41, 19],
+[4, 40, 14, 2, 41, 15],
+[2, 146, 116],
+[3, 58, 36, 2, 59, 37],
+[4, 36, 16, 4, 37, 17],
+[4, 36, 12, 4, 37, 13],
+[2, 86, 68, 2, 87, 69],
+[4, 69, 43, 1, 70, 44],
+[6, 43, 19, 2, 44, 20],
+[6, 43, 15, 2, 44, 16],
+[4, 101, 81],
+[1, 80, 50, 4, 81, 51],
+[4, 50, 22, 4, 51, 23],
+[3, 36, 12, 8, 37, 13],
+[2, 116, 92, 2, 117, 93],
+[6, 58, 36, 2, 59, 37],
+[4, 46, 20, 6, 47, 21],
+[7, 42, 14, 4, 43, 15],
+[4, 133, 107],
+[8, 59, 37, 1, 60, 38],
+[8, 44, 20, 4, 45, 21],
+[12, 33, 11, 4, 34, 12],
+[3, 145, 115, 1, 146, 116],
+[4, 64, 40, 5, 65, 41],
+[11, 36, 16, 5, 37, 17],
+[11, 36, 12, 5, 37, 13],
+[5, 109, 87, 1, 110, 88],
+[5, 65, 41, 5, 66, 42],
+[5, 54, 24, 7, 55, 25],
+[11, 36, 12, 7, 37, 13],
+[5, 122, 98, 1, 123, 99],
+[7, 73, 45, 3, 74, 46],
+[15, 43, 19, 2, 44, 20],
+[3, 45, 15, 13, 46, 16],
+[1, 135, 107, 5, 136, 108],
+[10, 74, 46, 1, 75, 47],
+[1, 50, 22, 15, 51, 23],
+[2, 42, 14, 17, 43, 15],
+[5, 150, 120, 1, 151, 121],
+[9, 69, 43, 4, 70, 44],
+[17, 50, 22, 1, 51, 23],
+[2, 42, 14, 19, 43, 15],
+[3, 141, 113, 4, 142, 114],
+[3, 70, 44, 11, 71, 45],
+[17, 47, 21, 4, 48, 22],
+[9, 39, 13, 16, 40, 14],
+[3, 135, 107, 5, 136, 108],
+[3, 67, 41, 13, 68, 42],
+[15, 54, 24, 5, 55, 25],
+[15, 43, 15, 10, 44, 16],
+[4, 144, 116, 4, 145, 117],
+[17, 68, 42],
+[17, 50, 22, 6, 51, 23],
+[19, 46, 16, 6, 47, 17],
+[2, 139, 111, 7, 140, 112],
+[17, 74, 46],
+[7, 54, 24, 16, 55, 25],
+[34, 37, 13],
+[4, 151, 121, 5, 152, 122],
+[4, 75, 47, 14, 76, 48],
+[11, 54, 24, 14, 55, 25],
+[16, 45, 15, 14, 46, 16],
+[6, 147, 117, 4, 148, 118],
+[6, 73, 45, 14, 74, 46],
+[11, 54, 24, 16, 55, 25],
+[30, 46, 16, 2, 47, 17],
+[8, 132, 106, 4, 133, 107],
+[8, 75, 47, 13, 76, 48],
+[7, 54, 24, 22, 55, 25],
+[22, 45, 15, 13, 46, 16],
+[10, 142, 114, 2, 143, 115],
+[19, 74, 46, 4, 75, 47],
+[28, 50, 22, 6, 51, 23],
+[33, 46, 16, 4, 47, 17],
+[8, 152, 122, 4, 153, 123],
+[22, 73, 45, 3, 74, 46],
+[8, 53, 23, 26, 54, 24],
+[12, 45, 15, 28, 46, 16],
+[3, 147, 117, 10, 148, 118],
+[3, 73, 45, 23, 74, 46],
+[4, 54, 24, 31, 55, 25],
+[11, 45, 15, 31, 46, 16],
+[7, 146, 116, 7, 147, 117],
+[21, 73, 45, 7, 74, 46],
+[1, 53, 23, 37, 54, 24],
+[19, 45, 15, 26, 46, 16],
+[5, 145, 115, 10, 146, 116],
+[19, 75, 47, 10, 76, 48],
+[15, 54, 24, 25, 55, 25],
+[23, 45, 15, 25, 46, 16],
+[13, 145, 115, 3, 146, 116],
+[2, 74, 46, 29, 75, 47],
+[42, 54, 24, 1, 55, 25],
+[23, 45, 15, 28, 46, 16],
+[17, 145, 115],
+[10, 74, 46, 23, 75, 47],
+[10, 54, 24, 35, 55, 25],
+[19, 45, 15, 35, 46, 16],
+[17, 145, 115, 1, 146, 116],
+[14, 74, 46, 21, 75, 47],
+[29, 54, 24, 19, 55, 25],
+[11, 45, 15, 46, 46, 16],
+[13, 145, 115, 6, 146, 116],
+[14, 74, 46, 23, 75, 47],
+[44, 54, 24, 7, 55, 25],
+[59, 46, 16, 1, 47, 17],
+[12, 151, 121, 7, 152, 122],
+[12, 75, 47, 26, 76, 48],
+[39, 54, 24, 14, 55, 25],
+[22, 45, 15, 41, 46, 16],
+[6, 151, 121, 14, 152, 122],
+[6, 75, 47, 34, 76, 48],
+[46, 54, 24, 10, 55, 25],
+[2, 45, 15, 64, 46, 16],
+[17, 152, 122, 4, 153, 123],
+[29, 74, 46, 14, 75, 47],
+[49, 54, 24, 10, 55, 25],
+[24, 45, 15, 46, 46, 16],
+[4, 152, 122, 18, 153, 123],
+[13, 74, 46, 32, 75, 47],
+[48, 54, 24, 14, 55, 25],
+[42, 45, 15, 32, 46, 16],
+[20, 147, 117, 4, 148, 118],
+[40, 75, 47, 7, 76, 48],
+[43, 54, 24, 22, 55, 25],
+[10, 45, 15, 67, 46, 16],
+[19, 148, 118, 6, 149, 119],
+[18, 75, 47, 31, 76, 48],
+[34, 54, 24, 34, 55, 25],
+[20, 45, 15, 61, 46, 16]
+];
+var qrRSBlock = function(totalCount, dataCount) {
+var _this = {};
+_this.totalCount = totalCount;
+_this.dataCount = dataCount;
+return _this;
+};
+var _this = {};
+var getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+switch(errorCorrectionLevel) {
+case QRErrorCorrectionLevel.L :
+return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+case QRErrorCorrectionLevel.M :
+return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+case QRErrorCorrectionLevel.Q :
+return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+case QRErrorCorrectionLevel.H :
+return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+default :
+return undefined;
+}
+};
+_this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+var rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+if (typeof rsBlock == 'undefined') {
+throw 'bad rs block @ typeNumber:' + typeNumber +
+'/errorCorrectionLevel:' + errorCorrectionLevel;
+}
+var length = rsBlock.length / 3;
+var list = [];
+for (var i = 0; i < length; i += 1) {
+var count = rsBlock[i * 3 + 0];
+var totalCount = rsBlock[i * 3 + 1];
+var dataCount = rsBlock[i * 3 + 2];
+for (var j = 0; j < count; j += 1) {
+list.push(qrRSBlock(totalCount, dataCount) );
+}
+}
+return list;
+};
+return _this;
+}();
+var qrBitBuffer = function() {
+var _buffer = [];
+var _length = 0;
+var _this = {};
+_this.getBuffer = function() {
+return _buffer;
+};
+_this.getAt = function(index) {
+var bufIndex = Math.floor(index / 8);
+return ( (_buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+};
+_this.put = function(num, length) {
+for (var i = 0; i < length; i += 1) {
+_this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+}
+};
+_this.getLengthInBits = function() {
+return _length;
+};
+_this.putBit = function(bit) {
+var bufIndex = Math.floor(_length / 8);
+if (_buffer.length <= bufIndex) {
+_buffer.push(0);
+}
+if (bit) {
+_buffer[bufIndex] |= (0x80 >>> (_length % 8) );
+}
+_length += 1;
+};
+return _this;
+};
+var qrNumber = function(data) {
+var _mode = QRMode.MODE_NUMBER;
+var _data = data;
+var _this = {};
+_this.getMode = function() {
+return _mode;
+};
+_this.getLength = function(buffer) {
+return _data.length;
+};
+_this.write = function(buffer) {
+var data = _data;
+var i = 0;
+while (i + 2 < data.length) {
+buffer.put(strToNum(data.substring(i, i + 3) ), 10);
+i += 3;
+}
+if (i < data.length) {
+if (data.length - i == 1) {
+buffer.put(strToNum(data.substring(i, i + 1) ), 4);
+} else if (data.length - i == 2) {
+buffer.put(strToNum(data.substring(i, i + 2) ), 7);
+}
+}
+};
+var strToNum = function(s) {
+var num = 0;
+for (var i = 0; i < s.length; i += 1) {
+num = num * 10 + chatToNum(s.charAt(i) );
+}
+return num;
+};
+var chatToNum = function(c) {
+if ('0' <= c && c <= '9') {
+return c.charCodeAt(0) - '0'.charCodeAt(0);
+}
+throw 'illegal char :' + c;
+};
+return _this;
+};
+var qrAlphaNum = function(data) {
+var _mode = QRMode.MODE_ALPHA_NUM;
+var _data = data;
+var _this = {};
+_this.getMode = function() {
+return _mode;
+};
+_this.getLength = function(buffer) {
+return _data.length;
+};
+_this.write = function(buffer) {
+var s = _data;
+var i = 0;
+while (i + 1 < s.length) {
+buffer.put(
+getCode(s.charAt(i) ) * 45 +
+getCode(s.charAt(i + 1) ), 11);
+i += 2;
+}
+if (i < s.length) {
+buffer.put(getCode(s.charAt(i) ), 6);
+}
+};
+var getCode = function(c) {
+if ('0' <= c && c <= '9') {
+return c.charCodeAt(0) - '0'.charCodeAt(0);
+} else if ('A' <= c && c <= 'Z') {
+return c.charCodeAt(0) - 'A'.charCodeAt(0) + 10;
+} else {
+switch (c) {
+case ' ' : return 36;
+case '$' : return 37;
+case '%' : return 38;
+case '*' : return 39;
+case '+' : return 40;
+case '-' : return 41;
+case '.' : return 42;
+case '/' : return 43;
+case ':' : return 44;
+default :
+throw 'illegal char :' + c;
+}
+}
+};
+return _this;
+};
+var qr8BitByte = function(data) {
+var _mode = QRMode.MODE_8BIT_BYTE;
+var _data = data;
+var _bytes = qrcode.stringToBytes(data);
+var _this = {};
+_this.getMode = function() {
+return _mode;
+};
+_this.getLength = function(buffer) {
+return _bytes.length;
+};
+_this.write = function(buffer) {
+for (var i = 0; i < _bytes.length; i += 1) {
+buffer.put(_bytes[i], 8);
+}
+};
+return _this;
+};
+var qrKanji = function(data) {
+var _mode = QRMode.MODE_KANJI;
+var _data = data;
+var stringToBytes = qrcode.stringToBytesFuncs['SJIS'];
+if (!stringToBytes) {
+throw 'sjis not supported.';
+}
+!function(c, code) {
+var test = stringToBytes(c);
+if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
+throw 'sjis not supported.';
+}
+}('\u53cb', 0x9746);
+var _bytes = stringToBytes(data);
+var _this = {};
+_this.getMode = function() {
+return _mode;
+};
+_this.getLength = function(buffer) {
+return ~~(_bytes.length / 2);
+};
+_this.write = function(buffer) {
+var data = _bytes;
+var i = 0;
+while (i + 1 < data.length) {
+var c = ( (0xff & data[i]) << 8) | (0xff & data[i + 1]);
+if (0x8140 <= c && c <= 0x9FFC) {
+c -= 0x8140;
+} else if (0xE040 <= c && c <= 0xEBBF) {
+c -= 0xC140;
+} else {
+throw 'illegal char at ' + (i + 1) + '/' + c;
+}
+c = ( (c >>> 8) & 0xff) * 0xC0 + (c & 0xff);
+buffer.put(c, 13);
+i += 2;
+}
+if (i < data.length) {
+throw 'illegal char at ' + (i + 1);
+}
+};
+return _this;
+};
+var byteArrayOutputStream = function() {
+var _bytes = [];
+var _this = {};
+_this.writeByte = function(b) {
+_bytes.push(b & 0xff);
+};
+_this.writeShort = function(i) {
+_this.writeByte(i);
+_this.writeByte(i >>> 8);
+};
+_this.writeBytes = function(b, off, len) {
+off = off || 0;
+len = len || b.length;
+for (var i = 0; i < len; i += 1) {
+_this.writeByte(b[i + off]);
+}
+};
+_this.writeString = function(s) {
+for (var i = 0; i < s.length; i += 1) {
+_this.writeByte(s.charCodeAt(i) );
+}
+};
+_this.toByteArray = function() {
+return _bytes;
+};
+_this.toString = function() {
+var s = '';
+s += '[';
+for (var i = 0; i < _bytes.length; i += 1) {
+if (i > 0) {
+s += ',';
+}
+s += _bytes[i];
+}
+s += ']';
+return s;
+};
+return _this;
+};
+var base64EncodeOutputStream = function() {
+var _buffer = 0;
+var _buflen = 0;
+var _length = 0;
+var _base64 = '';
+var _this = {};
+var writeEncoded = function(b) {
+_base64 += String.fromCharCode(encode(b & 0x3f) );
+};
+var encode = function(n) {
+if (n < 0) {
+} else if (n < 26) {
+return 0x41 + n;
+} else if (n < 52) {
+return 0x61 + (n - 26);
+} else if (n < 62) {
+return 0x30 + (n - 52);
+} else if (n == 62) {
+return 0x2b;
+} else if (n == 63) {
+return 0x2f;
+}
+throw 'n:' + n;
+};
+_this.writeByte = function(n) {
+_buffer = (_buffer << 8) | (n & 0xff);
+_buflen += 8;
+_length += 1;
+while (_buflen >= 6) {
+writeEncoded(_buffer >>> (_buflen - 6) );
+_buflen -= 6;
+}
+};
+_this.flush = function() {
+if (_buflen > 0) {
+writeEncoded(_buffer << (6 - _buflen) );
+_buffer = 0;
+_buflen = 0;
+}
+if (_length % 3 != 0) {
+var padlen = 3 - _length % 3;
+for (var i = 0; i < padlen; i += 1) {
+_base64 += '=';
+}
+}
+};
+_this.toString = function() {
+return _base64;
+};
+return _this;
+};
+var base64DecodeInputStream = function(str) {
+var _str = str;
+var _pos = 0;
+var _buffer = 0;
+var _buflen = 0;
+var _this = {};
+_this.read = function() {
+while (_buflen < 8) {
+if (_pos >= _str.length) {
+if (_buflen == 0) {
+return -1;
+}
+throw 'unexpected end of file./' + _buflen;
+}
+var c = _str.charAt(_pos);
+_pos += 1;
+if (c == '=') {
+_buflen = 0;
+return -1;
+} else if (c.match(/^\s$/) ) {
+continue;
+}
+_buffer = (_buffer << 6) | decode(c.charCodeAt(0) );
+_buflen += 6;
+}
+var n = (_buffer >>> (_buflen - 8) ) & 0xff;
+_buflen -= 8;
+return n;
+};
+var decode = function(c) {
+if (0x41 <= c && c <= 0x5a) {
+return c - 0x41;
+} else if (0x61 <= c && c <= 0x7a) {
+return c - 0x61 + 26;
+} else if (0x30 <= c && c <= 0x39) {
+return c - 0x30 + 52;
+} else if (c == 0x2b) {
+return 62;
+} else if (c == 0x2f) {
+return 63;
+} else {
+throw 'c:' + c;
+}
+};
+return _this;
+};
+var gifImage = function(width, height) {
+var _width = width;
+var _height = height;
+var _data = new Array(width * height);
+var _this = {};
+_this.setPixel = function(x, y, pixel) {
+_data[y * _width + x] = pixel;
+};
+_this.write = function(out) {
+out.writeString('GIF87a');
+out.writeShort(_width);
+out.writeShort(_height);
+out.writeByte(0x80); // 2bit
+out.writeByte(0);
+out.writeByte(0);
+out.writeByte(0x00);
+out.writeByte(0x00);
+out.writeByte(0x00);
+out.writeByte(0xff);
+out.writeByte(0xff);
+out.writeByte(0xff);
+out.writeString(',');
+out.writeShort(0);
+out.writeShort(0);
+out.writeShort(_width);
+out.writeShort(_height);
+out.writeByte(0);
+var lzwMinCodeSize = 2;
+var raster = getLZWRaster(lzwMinCodeSize);
+out.writeByte(lzwMinCodeSize);
+var offset = 0;
+while (raster.length - offset > 255) {
+out.writeByte(255);
+out.writeBytes(raster, offset, 255);
+offset += 255;
+}
+out.writeByte(raster.length - offset);
+out.writeBytes(raster, offset, raster.length - offset);
+out.writeByte(0x00);
+out.writeString(';');
+};
+var bitOutputStream = function(out) {
+var _out = out;
+var _bitLength = 0;
+var _bitBuffer = 0;
+var _this = {};
+_this.write = function(data, length) {
+if ( (data >>> length) != 0) {
+throw 'length over';
+}
+while (_bitLength + length >= 8) {
+_out.writeByte(0xff & ( (data << _bitLength) | _bitBuffer) );
+length -= (8 - _bitLength);
+data >>>= (8 - _bitLength);
+_bitBuffer = 0;
+_bitLength = 0;
+}
+_bitBuffer = (data << _bitLength) | _bitBuffer;
+_bitLength = _bitLength + length;
+};
+_this.flush = function() {
+if (_bitLength > 0) {
+_out.writeByte(_bitBuffer);
+}
+};
+return _this;
+};
+var getLZWRaster = function(lzwMinCodeSize) {
+var clearCode = 1 << lzwMinCodeSize;
+var endCode = (1 << lzwMinCodeSize) + 1;
+var bitLength = lzwMinCodeSize + 1;
+var table = lzwTable();
+for (var i = 0; i < clearCode; i += 1) {
+table.add(String.fromCharCode(i) );
+}
+table.add(String.fromCharCode(clearCode) );
+table.add(String.fromCharCode(endCode) );
+var byteOut = byteArrayOutputStream();
+var bitOut = bitOutputStream(byteOut);
+bitOut.write(clearCode, bitLength);
+var dataIndex = 0;
+var s = String.fromCharCode(_data[dataIndex]);
+dataIndex += 1;
+while (dataIndex < _data.length) {
+var c = String.fromCharCode(_data[dataIndex]);
+dataIndex += 1;
+if (table.contains(s + c) ) {
+s = s + c;
+} else {
+bitOut.write(table.indexOf(s), bitLength);
+if (table.size() < 0xfff) {
+if (table.size() == (1 << bitLength) ) {
+bitLength += 1;
+}
+table.add(s + c);
+}
+s = c;
+}
+}
+bitOut.write(table.indexOf(s), bitLength);
+bitOut.write(endCode, bitLength);
+bitOut.flush();
+return byteOut.toByteArray();
+};
+var lzwTable = function() {
+var _map = {};
+var _size = 0;
+var _this = {};
+_this.add = function(key) {
+if (_this.contains(key) ) {
+throw 'dup key:' + key;
+}
+_map[key] = _size;
+_size += 1;
+};
+_this.size = function() {
+return _size;
+};
+_this.indexOf = function(key) {
+return _map[key];
+};
+_this.contains = function(key) {
+return typeof _map[key] != 'undefined';
+};
+return _this;
+};
+return _this;
+};
+var createDataURL = function(width, height, getPixel) {
+var gif = gifImage(width, height);
+for (var y = 0; y < height; y += 1) {
+for (var x = 0; x < width; x += 1) {
+gif.setPixel(x, y, getPixel(x, y) );
+}
+}
+var b = byteArrayOutputStream();
+gif.write(b);
+var base64 = base64EncodeOutputStream();
+var bytes = b.toByteArray();
+for (var i = 0; i < bytes.length; i += 1) {
+base64.writeByte(bytes[i]);
+}
+base64.flush();
+return 'data:image/gif;base64,' + base64;
+};
+return qrcode;
+}();
+!function() {
+qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
+function toUTF8Array(str) {
+var utf8 = [];
+for (var i=0; i < str.length; i++) {
+var charcode = str.charCodeAt(i);
+if (charcode < 0x80) utf8.push(charcode);
+else if (charcode < 0x800) {
+utf8.push(0xc0 | (charcode >> 6),
+0x80 | (charcode & 0x3f));
+}
+else if (charcode < 0xd800 || charcode >= 0xe000) {
+utf8.push(0xe0 | (charcode >> 12),
+0x80 | ((charcode>>6) & 0x3f),
+0x80 | (charcode & 0x3f));
+}
+else {
+i++;
+charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+| (str.charCodeAt(i) & 0x3ff));
+utf8.push(0xf0 | (charcode >>18),
+0x80 | ((charcode>>12) & 0x3f),
+0x80 | ((charcode>>6) & 0x3f),
+0x80 | (charcode & 0x3f));
+}
+}
+return utf8;
+}
+return toUTF8Array(s);
+};
+}();
+</script>
 <script id="i18n">
 /* i18n: the page is written in Italian; French, German and English are applied over the rendered text */
 (() => {
-const UI = {"# anni":["# ans","# Jahre","# years"],"# di troppo: uno resta in tribuna":["# de trop : un reste en tribune","# zu viel: einer bleibt auf der Tribüne","# too many: one sits out"],"# di troppo: # restano in tribuna":["# de trop : # restent en tribune","# zu viel: # bleiben auf der Tribüne","# too many: # sit out"],"# disponibili su #":["# disponibles sur #","# von # verfügbar","# of # available"],"# giocatori in # squadre":["# joueurs dans # équipes","# Spieler in # Teams","# players in # teams"],"# giocatore in # squadra":["# joueur dans # équipe","# Spieler in # Team","# player in # team"],"# giocatori in # squadra":["# joueurs dans # équipe","# Spieler in # Team","# players in # team"],"# giorni":["# jours","# Tage","# days"],"# giorno":["# jour","# Tag","# day"],"# partita":["# match","# Spiel","# game"],"# partite":["# matchs","# Spiele","# games"],"# partite di fila":["# matchs d'affilée","# Spiele in Folge","# games in a row"],"#+ partite di fila":["#+ matchs d'affilée","#+ Spiele in Folge","#+ games in a row"],"# pt in # gare":["# pts en # matchs","# Pkt. in # Spielen","# pts in # games"],"# rose":["# effectifs","# Kader","# rosters"],"# rosa":["# effectif","# Kader","# roster"],"# su #":["# sur #","# von #","# of #"],"#+# punti":["#+# points","#+# Punkte","#+# points"],"#,#% parate":["#,#% d'arrêts","#,#% Paraden","#.#% saves"],"#/# da titolare":["#/# comme titulaire","#/# als Stammgoalie","#/# as starter"],"#/# presenze":["#/# présences","#/# Einsätze","#/# appearances"],"#/# scontate":["#/# purgés","#/# abgesessen","#/# served"],"# PG · # G · # A":["# MJ · # B · # A","# Sp. · # T · # A","# GP · # G · # A"],"# PG · #,#% parate":["# MJ · #,#% d'arrêts","# Sp. · #,#% Paraden","# GP · #.#% saves"],"punti in # PG":["points en # MJ","Punkte in # Sp.","points in # GP"],"#–# settimane (# @ – # @)":["#–# semaines (# @ – # @)","#–# Wochen (# @ – # @)","#–# weeks (# @ – # @)"],"#–# settimane di stop (# @ – # @)":["#–# semaines d'arrêt (# @ – # @)","#–# Wochen Pause (# @ – # @)","#–# weeks out (# @ – # @)"],"Rientro previsto nella settimana del #.# (# @ – # @)":["Retour prévu dans la semaine du #.# (# @ – # @)","Rückkehr in der Woche vom #.# erwartet (# @ – # @)","Expected back in the week of #.# (# @ – # @)"],"#:# d.r.":["#:# tab","#:# n.P.","#:# SO"],"#:# d.t.s.":["#:# prol.","#:# n.V.","#:# OT"],"+ Aggiungi a La mia rosa":["+ Ajouter à Mon effectif","+ Zu Mein Kader hinzufügen","+ Add to My roster"],"+ Nuova rosa":["+ Nouvel effectif","+ Neuer Kader","+ New roster"],"A referto":["Sur la feuille de match","Im Aufgebot","In the lineup"],"A referto nell'ultima partita":["Sur la feuille du dernier match","Im Aufgebot beim letzten Spiel","In the lineup last game"],"A referto nell'ultima partita (# stranieri disponibili per # posti)":["Sur la feuille du dernier match (# étrangers disponibles pour # places)","Im Aufgebot beim letzten Spiel (# Ausländer verfügbar für # Plätze)","In the lineup last game (# imports available for # spots)"],"A referto: # gol, # assist, #' sul ghiaccio":["Sur la feuille : # but(s), # assist(s), #' de glace","Im Aufgebot: # Tore, # Assists, #' Eiszeit","In the lineup: # goals, # assists, #' on ice"],"A rischio tribuna":["Risque la tribune","Tribüne droht","May sit out"],"Aggiungi un giocatore a La mia rosa":["Ajouter un joueur à Mon effectif","Spieler zu Mein Kader hinzufügen","Add a player to My roster"],"Annulla":["Annuler","Abbrechen","Cancel"],"Apri la rosa":["Ouvrir l'effectif","Kader öffnen","Open roster"],"Assist":["Assists","Assists","Assists"],"Attaccante":["Attaquant","Stürmer","Forward"],"Attaccanti":["Attaquants","Stürmer","Forwards"],"Difensori":["Défenseurs","Verteidiger","Defensemen"],"Portieri":["Gardiens","Torhüter","Goaltenders"],"Automatico":["Automatique","Automatisch","Automatic"],"Cerca giocatore":["Chercher un joueur","Spieler suchen","Search player"],"Cerca un giocatore da aggiungere":["Chercher un joueur à ajouter","Spieler zum Hinzufügen suchen","Search a player to add"],"Cerca un giocatore da aggiungere…":["Chercher un joueur à ajouter…","Spieler zum Hinzufügen suchen…","Search a player to add…"],"Chi manca in National League":["Qui manque en National League","Wer in der National League fehlt","Who's missing in the National League"],"Chiaro":["Clair","Hell","Light"],"Scuro":["Sombre","Dunkel","Dark"],"Tema":["Thème","Design","Theme"],"Tema: automatico":["Thème : automatique","Design: automatisch","Theme: automatic"],"Tema: chiaro":["Thème : clair","Design: hell","Theme: light"],"Tema: scuro":["Thème : sombre","Design: dunkel","Theme: dark"],"come il dispositivo":["comme l'appareil","wie das Gerät","same as device"],"Chiudi":["Fermer","Schliessen","Close"],"Classifica":["Classement","Rang","Standing"],"Crea una o più rose, per esempio quella del fantahockey: per ogni giocatore vedi subito se è disponibile, il bollettino medico, le ultime # partite e quando gioca.":["Crée un ou plusieurs effectifs, par exemple celui de ton fantasy hockey : pour chaque joueur tu vois tout de suite s'il est disponible, le bulletin médical, les # derniers matchs et quand il joue.","Erstelle einen oder mehrere Kader, zum Beispiel dein Fantasy-Hockey-Team: Für jeden Spieler siehst du sofort, ob er verfügbar ist, den medizinischen Bericht, die letzten # Spiele und wann er spielt.","Create one or more rosters, for example your fantasy hockey team: for each player you instantly see whether he's available, the medical report, the last # games and when he plays."],"Da valutare":["À évaluer","Offen","To be assessed"],"Da valutare: #":["À évaluer : #","Offen: #","To be assessed: #"],"Data della prima partita di nuovo a referto.":["Date du premier match de retour sur la feuille.","Datum des ersten Spiels wieder im Aufgebot.","Date of the first game back in the lineup."],"Data non nota":["Date inconnue","Datum unbekannt","Date unknown"],"data non nota":["date inconnue","Datum unbekannt","date unknown"],"Difensore":["Défenseur","Verteidiger","Defenseman"],"Disponibile":["Disponible","Verfügbar","Available"],"disponibili":["disponibles","verfügbar","available"],"Elenco completo":["Liste complète","Vollständige Liste","Full list"],"dati al":["données au","Stand","data as of"],"Elimina rosa":["Supprimer l'effectif","Kader löschen","Delete roster"],"Fermo da più tempo":["Absent depuis le plus longtemps","Am längsten ausgefallen","Out the longest"],"Fermo dal":["Absent depuis","Ausfall seit","Out since"],"Filtra per gravità":["Filtrer par gravité","Nach Schwere filtern","Filter by severity"],"Filtra squadre":["Filtrer les équipes","Teams filtern","Filter teams"],"Fuori dai convocati":["Hors de l'alignement","Nicht im Aufgebot","Not in the lineup"],"Giocatore":["Joueur","Spieler","Player"],"Giocatori trovati":["Joueurs trouvés","Gefundene Spieler","Players found"],"Giorno per giorno":["Au jour le jour","Von Tag zu Tag","Day-to-day"],"Giorno per giorno: #":["Au jour le jour : #","Von Tag zu Tag: #","Day-to-day: #"],"Gli indisponibili con più punti in questa stagione. Tocca un giocatore per la scheda completa.":["Les absents avec le plus de points cette saison. Touche un joueur pour sa fiche complète.","Die Ausfälle mit den meisten Punkten dieser Saison. Tippe auf einen Spieler für das ganze Profil.","The missing players with the most points this season. Tap a player for the full card."],"Gol":["Buts","Tore","Goals"],"Il prossimo impegno di ogni giocatore di questa rosa; il pallino indica lo stato.":["Le prochain match de chaque joueur de cet effectif ; la pastille indique son statut.","Das nächste Spiel jedes Spielers in diesem Kader; der Punkt zeigt den Status.","The next game of every player on this roster; the dot shows the status."],"In sovrannumero nell'ultima partita":["En surnombre lors du dernier match","Überzählig beim letzten Spiel","Extra import last game"],"In tribuna per sovrannumero":["En tribune pour surnombre","Überzählig auf der Tribüne","Sat out as extra import"],"Indisponibili":["Absents","Ausfälle","Unavailable"],"Indisponibili per squadra":["Absents par équipe","Ausfälle pro Team","Unavailable by team"],"indisponibili":["absents","Ausfälle","unavailable"],"Infortunato":["Blessé","Verletzt","Injured"],"Infortuni":["Blessures","Verletzungen","Injuries"],"Infortuni:":["Blessures :","Verletzungen:","Injuries:"],"Infortunio":["Blessure","Verletzung","Injury"],"La mia rosa":["Mon effectif","Mein Kader","My roster"],"La mia rosa è ancora vuota":["Mon effectif est encore vide","Mein Kader ist noch leer","My roster is still empty"],"Rosa #":["Effectif #","Kader #","Roster #"],"Rosa # è ancora vuota":["Effectif # est encore vide","Kader # ist noch leer","Roster # is still empty"],"Aggiungi un giocatore a Rosa #":["Ajouter un joueur à Effectif #","Spieler zu Kader # hinzufügen","Add a player to Roster #"],"Le assenze più pesanti":["Les absences les plus lourdes","Die schwersten Ausfälle","The biggest absences"],"Le mie rose":["Mes effectifs","Meine Kader","My rosters"],"Rose":["Effectifs","Kader","Rosters"],"Le mie rose.":["Mes effectifs.","Meine Kader.","My rosters."],"Le tue rose":["Tes effectifs","Deine Kader","Your rosters"],"Le tue rose sono salvate in questo browser e, quando apri la pagina con il tuo account Claude, anche nel tuo spazio privato di questa pagina: le ritrovi sugli altri dispositivi e nessun altro può leggerle.":["Tes effectifs sont enregistrés dans ce navigateur et, quand tu ouvres la page avec ton compte Claude, aussi dans ton espace privé de cette page : tu les retrouves sur tes autres appareils et personne d'autre ne peut les lire.","Deine Kader werden in diesem Browser gespeichert und, wenn du die Seite mit deinem Claude-Konto öffnest, auch in deinem privaten Bereich dieser Seite: Du findest sie auf deinen anderen Geräten wieder, und niemand sonst kann sie lesen.","Your rosters are saved in this browser and, when you open the page with your Claude account, also in your private space for this page: you'll find them on your other devices and nobody else can read them."],"Le tue rose sono salvate in questo browser: le ritrovi quando torni su questa pagina dallo stesso dispositivo.":["Tes effectifs sont enregistrés dans ce navigateur : tu les retrouves quand tu reviens sur cette page depuis le même appareil.","Deine Kader werden in diesem Browser gespeichert: Du findest sie wieder, wenn du die Seite auf demselben Gerät öffnest.","Your rosters are saved in this browser: you'll find them again when you come back to this page on the same device."],"Legenda completa nella sezione":["Légende complète dans la section","Vollständige Legende im Bereich","Full legend in the section"],"Lo stato è calcolato dai dati al #.#.#: «Disponibile» significa nessuna segnalazione medica e presenza a referto nell'ultima partita, non una garanzia che giocherà.":["Le statut est calculé avec les données au #.#.# : « Disponible » signifie aucun signalement médical et présent sur la feuille du dernier match, pas une garantie qu'il jouera.","Der Status basiert auf den Daten vom #.#.#: «Verfügbar» heisst keine medizinische Meldung und im Aufgebot beim letzten Spiel, aber keine Garantie, dass er spielt.","Status is based on the data as of #.#.#: \"Available\" means no medical report and in the lineup last game, not a guarantee that he'll play."],"Lungo termine":["Long terme","Langzeit","Long-term"],"Lungo termine: #":["Long terme : #","Langzeit: #","Long-term: #"],"Malato":["Malade","Krank","Ill"],"Malattia":["Maladie","Krankheit","Illness"],"Malattia: #":["Maladie : #","Krankheit: #","Illness: #"],"Massimo # stranieri a referto per partita":["Maximum # étrangers sur la feuille par match","Maximal # Ausländer pro Spiel im Aufgebot","Maximum # imports in the lineup per game"],"Mostra tutti (#)":["Tout afficher (#)","Alle anzeigen (#)","Show all (#)"],"Mostra meno":["Afficher moins","Weniger anzeigen","Show less"],"Motivo non noto":["Motif inconnu","Grund unbekannt","Reason unknown"],"National League #/#":["National League #/#","National League #/#","National League #/#"],"Nessun giocatore trovato. Prova con il solo cognome.":["Aucun joueur trouvé. Essaie avec le nom de famille seul.","Kein Spieler gefunden. Versuche es nur mit dem Nachnamen.","No player found. Try the last name only."],"Nessun infortunio o malattia segnalati dalle fonti alla data dell'aggiornamento.":["Aucune blessure ni maladie signalée par les sources à la date de la mise à jour.","Keine Verletzung oder Krankheit von den Quellen zum Stand der Aktualisierung gemeldet.","No injury or illness reported by the sources as of the update."],"Nessun rientro dopo la pausa.":["Aucun retour après la pause.","Keine Rückkehr nach der Pause.","No returns after the break."],"Nessun rientro datato nelle prossime settimane.":["Aucun retour daté dans les prochaines semaines.","Keine datierte Rückkehr in den nächsten Wochen.","No dated returns in the coming weeks."],"Nessuna presenza in National League in questa stagione.":["Aucun match de National League cette saison.","Kein Einsatz in der National League in dieser Saison.","No National League games this season."],"Nessuna presenza in stagione":["Aucun match cette saison","Kein Einsatz in dieser Saison","No games this season"],"Nessuna squalifica recente.":["Aucune suspension récente.","Keine aktuellen Sperren.","No recent suspensions."],"Nessuna segnalazione attiva per questo giocatore.":["Aucun signalement en cours pour ce joueur.","Keine aktuelle Meldung für diesen Spieler.","Nothing reported for this player right now."],"Nessun giocatore corrisponde ai filtri. Prova a togliere un filtro o a cambiare la ricerca.":["Aucun joueur ne correspond aux filtres. Essaie d'enlever un filtre ou de changer la recherche.","Kein Spieler entspricht den Filtern. Entferne einen Filter oder ändere die Suche.","No player matches the filters. Try removing a filter or changing the search."],"Infermeria vuota: nessun infortunato segnalato e tutti i titolari erano a referto nell'ultima partita.":["Infirmerie vide : aucun blessé signalé et tous les titulaires étaient sur la feuille du dernier match.","Krankenstation leer: keine Verletzten gemeldet, alle Stammspieler waren beim letzten Spiel im Aufgebot.","Infirmary empty: no injuries reported and all regulars were in the lineup last game."],"Statistiche stagionali non disponibili.":["Statistiques de la saison non disponibles.","Saisonstatistiken nicht verfügbar.","Season stats not available."],"Nome della rosa":["Nom de l'effectif","Name des Kaders","Roster name"],"Nome o infortunio":["Nom ou blessure","Name oder Verletzung","Name or injury"],"Non più in rosa":["Plus dans l'effectif","Nicht mehr im Kader","No longer on the roster"],"Non a referto":["Pas sur la feuille de match","Nicht im Aufgebot","Not in the lineup"],"Non a referto nell'ultima partita, motivo non comunicato":["Pas sur la feuille du dernier match, motif non communiqué","Beim letzten Spiel nicht im Aufgebot, Grund nicht bekannt gegeben","Not in the lineup last game, reason not given"],"Mai a referto nelle ultime # partite, motivo non comunicato":["Jamais sur la feuille lors des # derniers matchs, motif non communiqué","In den letzten # Spielen nie im Aufgebot, Grund nicht bekannt gegeben","Not in the lineup in the last # games, reason not given"],"Portiere di riserva nell'ultima partita":["Gardien remplaçant lors du dernier match","Ersatzgoalie beim letzten Spiel","Backup goalie last game"],"Nuova rosa creata: scegli un nome e aggiungi i giocatori.":["Nouvel effectif créé : choisis un nom et ajoute des joueurs.","Neuer Kader erstellt: Wähle einen Namen und füge Spieler hinzu.","New roster created: pick a name and add players."],"Off the Ice, panoramica":["Off the Ice, aperçu","Off the Ice, Übersicht","Off the Ice, overview"],"Ordina per":["Trier par","Sortieren nach","Sort by"],"Panoramica":["Aperçu","Übersicht","Overview"],"Partite":["Matchs","Spiele","Games"],"Per ogni straniero, cosa è successo nelle ultime # partite della sua squadra e perché era eventualmente assente.":["Pour chaque étranger, ce qui s'est passé lors des # derniers matchs de son équipe et pourquoi il était éventuellement absent.","Für jeden Ausländer: was in den letzten # Spielen seines Teams passiert ist und warum er allenfalls fehlte.","For each import, what happened in his team's last # games and why he was missing, if he was."],"Per provare subito, i migliori marcatori della stagione:":["Pour essayer tout de suite, les meilleurs marqueurs de la saison :","Zum direkten Ausprobieren, die Topskorer der Saison:","To try it right away, the season's top scorers:"],"Per punti in stagione":["Par points cette saison","Nach Saisonpunkten","By season points"],"Portiere":["Gardien","Torhüter","Goaltender"],"Portiere di riserva":["Gardien remplaçant","Ersatzgoalie","Backup goalie"],"Prossima":["Prochain","Nächstes","Next"],"Prossima partita":["Prochain match","Nächstes Spiel","Next game"],"Punti":["Points","Punkte","Points"],"Punti in stagione":["Points cette saison","Saisonpunkte","Season points"],"Quando giocano":["Quand ils jouent","Wann sie spielen","When they play"],"Raggruppa per":["Grouper par","Gruppieren nach","Group by"],"Rientrati di recente":["Retours récents","Kürzlich zurück","Recently back"],"Rientrato":["De retour","Zurück","Back"],"Rientri attesi a breve":["Retours attendus bientôt","Bald erwartete Rückkehrer","Expected back soon"],"Rientro":["Retour","Rückkehr","Return"],"Rientro più vicino":["Retour le plus proche","Nächste Rückkehr","Soonest return"],"Rientro previsto":["Retour prévu","Erwartete Rückkehr","Expected return"],"Rinomina":["Renommer","Umbenennen","Rename"],"Ruolo":["Poste","Position","Position"],"Saltate":["Manqués","Verpasst","Missed"],"Salva":["Enregistrer","Speichern","Save"],"Scegli la squadra":["Choisis l'équipe","Wähle das Team","Pick a team"],"il numero indica gli indisponibili":["le nombre indique les absents","die Zahl zeigt die Ausfälle","the number shows who's out"],"Scheda giocatore":["Fiche joueur","Spielerprofil","Player card"],"Scrivi un cognome nel campo qui sopra e scegli il giocatore: comparirà qui con stato, ultime # partite e prossimo impegno. Puoi aggiungerlo anche dalla scheda di qualsiasi giocatore.":["Écris un nom de famille dans le champ ci-dessus et choisis le joueur : il apparaîtra ici avec son statut, ses # derniers matchs et son prochain match. Tu peux aussi l'ajouter depuis la fiche de n'importe quel joueur.","Schreibe einen Nachnamen ins Feld oben und wähle den Spieler: Er erscheint hier mit Status, den letzten # Spielen und dem nächsten Spiel. Du kannst ihn auch über das Profil jedes Spielers hinzufügen.","Type a last name in the field above and pick the player: he'll show up here with his status, last # games and next game. You can also add him from any player's card."],"Sei caselle = sei posti a referto. Con più di # disponibili qualcuno resta fuori.":["Six cases = six places sur la feuille. Avec plus de # disponibles, quelqu'un reste dehors.","Sechs Felder = sechs Plätze im Aufgebot. Mit mehr als # Verfügbaren bleibt jemand draussen.","Six boxes = six lineup spots. With more than # available, someone sits out."],"Settimane":["Semaines","Wochen","Weeks"],"Settimane: #":["Semaines : #","Wochen: #","Weeks: #"],"Sezioni":["Sections","Bereiche","Sections"],"Solo con sovrannumero":["Seulement avec surnombre","Nur mit Überzähligen","Only with extra imports"],"Solo con stranieri assenti":["Seulement avec étrangers absents","Nur mit fehlenden Ausländern","Only with imports missing"],"Solo stranieri":["Étrangers seulement","Nur Ausländer","Imports only"],"Sovrannumero":["Surnombre","Überzählig","Extra import"],"Squadra":["Équipe","Team","Team"],"Squadre":["Équipes","Teams","Teams"],"Squalificato":["Suspendu","Gesperrt","Suspended"],"Squalifiche":["Suspensions","Sperren","Suspensions"],"Stagione finita":["Saison terminée","Saison vorbei","Season over"],"Stagione finita: #":["Saison terminée : #","Saison vorbei: #","Season over: #"],"Stato":["Statut","Status","Status"],"Stop più recente":["Arrêt le plus récent","Neuester Ausfall","Most recent"],"Stranieri":["Étrangers","Ausländer","Imports"],"Stranieri disponibili":["Étrangers disponibles","Verfügbare Ausländer","Imports available"],"Stranieri disponibili al prossimo turno":["Étrangers disponibles au prochain match","Verfügbare Ausländer für die nächste Runde","Imports available for the next game"],"Stranieri nelle ultime # partite":["Étrangers lors des # derniers matchs","Ausländer in den letzten # Spielen","Imports in the last # games"],"Stranieri: chi gioca e chi resta in tribuna":["Étrangers : qui joue et qui reste en tribune","Ausländer: wer spielt und wer auf der Tribüne sitzt","Imports: who plays and who sits out"],"Straniero":["Étranger","Ausländer","Import"],"Svuota rosa":["Vider l'effectif","Kader leeren","Clear roster"],"Annulla rosa":["Annuler","Abbrechen","Cancel"],"Sì, svuota":["Oui, vider","Ja, leeren","Yes, clear"],"Sì, elimina":["Oui, supprimer","Ja, löschen","Yes, delete"],"Tocca una casella per il dettaglio della partita, o un nome per la scheda del giocatore.":["Touche une case pour le détail du match, ou un nom pour la fiche du joueur.","Tippe auf ein Feld für Spieldetails oder auf einen Namen für das Spielerprofil.","Tap a box for the game details, or a name for the player card."],"Togli dalla rosa":["Retirer de l'effectif","Aus dem Kader entfernen","Remove from roster"],"Togli":["Retirer","Entfernen","Remove"],"Tutte":["Toutes","Alle","All"],"Tutte le squadre":["Toutes les équipes","Alle Teams","All teams"],"Tutti":["Tous","Alle","All"],"Tutti gli infortuni":["Toutes les blessures","Alle Verletzungen","All injuries"],"Tutti i giocatori fermi per infortunio o malattia nelle # squadre, con motivo, durata e rientro previsto, verificati sulle formazioni delle ultime partite.":["Tous les joueurs à l'arrêt pour blessure ou maladie dans les # équipes, avec motif, durée et retour prévu, vérifiés sur les alignements des derniers matchs.","Alle wegen Verletzung oder Krankheit ausfallenden Spieler der # Teams, mit Grund, Dauer und erwarteter Rückkehr, überprüft anhand der Aufstellungen der letzten Spiele.","Every player out injured or ill across the # teams, with reason, length and expected return, checked against the lineups of the latest games."],"Ultime #":["# derniers","Letzte #","Last #"],"Ultime # partite":["# derniers matchs","Letzte # Spiele","Last # games"],"Ultime # partite di ogni squadra.":["# derniers matchs de chaque équipe.","Letzte # Spiele jedes Teams.","Each team's last # games."],"Ultimi stop":["Derniers arrêts","Neueste Ausfälle","Latest absences"],"Medical Report di sport.ch":["Medical Report de sport.ch","Medical Report von sport.ch","sport.ch Medical Report"],"bollettini di swisshockeynews.ch":["bulletins de swisshockeynews.ch","Bulletins von swisshockeynews.ch","swisshockeynews.ch reports"],"con la stagione finita":["avec la saison terminée","mit beendeter Saison","out for the season"],"da verificare":["à vérifier","zu prüfen","to check"],"giocatori in rosa":["joueurs dans l'effectif","Spieler im Kader","players on the roster"],"giocatori indisponibili":["joueurs absents","Spieler fallen aus","players unavailable"],"nuovi stop dal # §":["nouveaux arrêts depuis le # §","neue Ausfälle seit dem #. §","new absences since § #"],"partita":["match","Spiel","game"],"partite":["matchs","Spiele","games"],"partite di fila":["matchs d'affilée","Spiele in Folge","games in a row"],"salvate su questo dispositivo":["enregistrés sur cet appareil","auf diesem Gerät gespeichert","saved on this device"],"salvate nel tuo account":["enregistrés dans ton compte","in deinem Konto gespeichert","saved in your account"],"account non raggiungibile, per ora salvate su questo dispositivo":["compte inaccessible, enregistrés pour l'instant sur cet appareil","Konto nicht erreichbar, vorerst auf diesem Gerät gespeichert","account unreachable, saved on this device for now"],"sono stranieri":["sont étrangers","sind Ausländer","are imports"],"stop nell'ultima gara":["absent lors du dernier match","Ausfall im letzten Spiel","out last game"],"tutti a referto":["tous sur la feuille","alle im Aufgebot","all in the lineup"],"# posti liberi":["# places libres","# freie Plätze","# open spots"],"# posto libero":["# place libre","# freier Platz","# open spot"],"«Saltate» conta le partite consecutive mancate fino all'ultima giocata dalla squadra; il segno + indica che il giocatore non compare a referto dal # §.":["« Manqués » compte les matchs consécutifs manqués jusqu'au dernier joué par l'équipe ; le signe + indique que le joueur n'apparaît plus sur la feuille depuis le # §.","«Verpasst» zählt die aufeinanderfolgenden verpassten Spiele bis zum letzten Spiel des Teams; das Zeichen + bedeutet, dass der Spieler seit dem #. § nicht mehr im Aufgebot steht.","\"Missed\" counts the consecutive games missed up to the team's latest game; the + sign means the player hasn't been in a lineup since § #."],"«Sovrannumero» è dedotto dalle formazioni: la squadra ha schierato # stranieri e per il giocatore escluso non risultano infortuni, malattie o squalifiche. I club non comunicano ufficialmente il motivo.":["« Surnombre » est déduit des alignements : l'équipe a aligné # étrangers et pour le joueur écarté il n'y a ni blessure, ni maladie, ni suspension. Les clubs ne communiquent pas officiellement le motif.","«Überzählig» wird aus den Aufstellungen abgeleitet: Das Team hat # Ausländer eingesetzt, und für den nicht eingesetzten Spieler ist keine Verletzung, Krankheit oder Sperre bekannt. Die Clubs geben den Grund nicht offiziell bekannt.","\"Extra import\" is inferred from the lineups: the team dressed # imports and the player left out has no reported injury, illness or suspension. Clubs don't officially give the reason."],"# giocatori: # disponibili, # da verificare, # indisponibili":["# joueurs : # disponibles, # à vérifier, # absents","# Spieler: # verfügbar, # zu prüfen, # fallen aus","# players: # available, # to check, # unavailable"],"aggiungi i tuoi giocatori per vedere subito chi è disponibile":["ajoute tes joueurs pour voir tout de suite qui est disponible","füge deine Spieler hinzu und sieh sofort, wer verfügbar ist","add your players to instantly see who's available"],"# stranieri disponibili per # posti; #× in sovrannumero nelle ultime #":["# étrangers disponibles pour # places ; #× en surnombre lors des # derniers","# Ausländer verfügbar für # Plätze; #× überzählig in den letzten #","# imports available for # spots; #× extra in the last #"],"Fonti.":["Sources.","Quellen.","Sources."],"Fonti:":["Sources :","Quellen:","Sources:"],"Metodo.":["Méthode.","Methode.","Method."],"Personaggini.":["Personnages.","Figuren.","Figures."],"I personaggini dei giocatori sono illustrazioni originali create per Off the Ice e non ritraggono fedelmente i giocatori; le statistiche stagionali provengono da":["Les personnages des joueurs sont des illustrations originales créées pour Off the Ice et ne les représentent pas fidèlement ; les statistiques de la saison proviennent de","Die Spielerfiguren sind eigens für Off the Ice gezeichnete Illustrationen und keine genauen Porträts; die Saisonstatistiken stammen von","The player figures are original illustrations made for Off the Ice and are not exact likenesses; season stats come from"],"(stato #.#.#),":["(état au #.#.#),","(Stand #.#.#),","(as of #.#.#),"],"(fino al #.#.#) e":["(jusqu'au #.#.#) et","(bis #.#.#) und","(up to #.#.#) and"],"(#.#.#). Formazioni e risultati:":["(#.#.#). Alignements et résultats :","(#.#.#). Aufstellungen und Resultate:","(#.#.#). Lineups and results:"],". Rose e licenze straniere: swisshockeynews.ch. Squalifiche: decisioni della National League riportate da swisshockeynews.ch.":[". Effectifs et licences étrangères : swisshockeynews.ch. Suspensions : décisions de la National League relayées par swisshockeynews.ch.",". Kader und Ausländerlizenzen: swisshockeynews.ch. Sperren: Entscheide der National League, gemeldet von swisshockeynews.ch.",". Rosters and import licences: swisshockeynews.ch. Suspensions: National League decisions as reported by swisshockeynews.ch."],"Ogni nome è stato confrontato con le formazioni di":["Chaque nom a été comparé aux alignements de","Jeder Name wurde mit den Aufstellungen von","Every name was checked against the lineups of"],"partite giocate tra il #.# e il #.#.#: chi figurava infortunato ma è sceso in pista nell'ultima gara è stato tolto dall'elenco. I club comunicano poco sugli infortuni, quindi molte diagnosi restano generiche. Le fonti vengono controllate automaticamente due volte al giorno, al mattino e dopo le partite serali, e la pagina si aggiorna quando ci sono novità; la data in alto indica l'ultimo aggiornamento.":["matchs joués entre le #.# et le #.#.# : qui figurait comme blessé mais a joué le dernier match a été retiré de la liste. Les clubs communiquent peu sur les blessures, donc beaucoup de diagnostics restent vagues. Les sources sont vérifiées automatiquement deux fois par jour, le matin et après les matchs du soir, et la page se met à jour quand il y a du nouveau ; la date en haut indique la dernière mise à jour.","Spielen zwischen dem #.# und dem #.#.# verglichen: Wer als verletzt galt, aber im letzten Spiel auf dem Eis stand, wurde von der Liste entfernt. Die Clubs informieren wenig über Verletzungen, daher bleiben viele Diagnosen vage. Die Quellen werden zweimal täglich automatisch geprüft, am Morgen und nach den Abendspielen, und die Seite wird bei Neuigkeiten aktualisiert; das Datum oben zeigt die letzte Aktualisierung.","games played between #.# and #.#.#: anyone listed as injured who played in the latest game was removed from the list. Clubs say little about injuries, so many diagnoses stay vague. Sources are checked automatically twice a day, in the morning and after the evening games, and the page updates when there's news; the date at the top shows the latest update."],"#.#.#, ore #:#":["#.#.#, #h#","#.#.#, #:# Uhr","#.#.#, #:#"],"#.#.#, ore #:#, in casa con":["#.#.#, #h#, à domicile contre","#.#.#, #:# Uhr, zu Hause gegen","#.#.#, #:#, at home vs"],"Di nuovo a referto dal":["De nouveau sur la feuille depuis le","Wieder im Aufgebot seit","Back in the lineup since"],"Anche in:":["Aussi dans :","Auch in:","Also in:"],"✓ in rosa":["✓ dans l'effectif","✓ im Kader","✓ on roster"],"Lingua":["Langue","Sprache","Language"],"Lingua: italiano":["Langue : italien","Sprache: Italienisch","Language: Italian"],"INF":["BLE","VER","INJ"],"MAL":["MAL","KRA","ILL"],"SQ":["SUS","SPE","SUS"],"SN":["SUR","ÜZ","EXT"],"R":["R","E","B"],"A":["A","S","F"],"P":["G","T","G"],"V":["V","S","W"],"S":["D","N","L"],"Modifica annullata.":["Modification annulée.","Änderung rückgängig gemacht.","Change undone."],"Una rosa può contenere al massimo # giocatori.":["Un effectif peut contenir au maximum # joueurs.","Ein Kader kann höchstens # Spieler enthalten.","A roster can hold at most # players."],"Puoi creare al massimo # rose.":["Tu peux créer au maximum # effectifs.","Du kannst höchstens # Kader erstellen.","You can create at most # rosters."],"In porta da titolare":["Titulaire dans les buts","Als Stammgoalie im Tor","Started in goal"],"A referto come portiere di riserva":["Sur la feuille comme gardien remplaçant","Als Ersatzgoalie im Aufgebot","Dressed as backup goalie"],"Ha lasciato la squadra":["A quitté l'équipe","Hat das Team verlassen","Left the team"],"Squalifica scontata":["Suspension purgée","Sperre abgesessen","Suspension served"],"# stranieri disponibili per # posti":["# étrangers disponibles pour # places","# Ausländer verfügbar für # Plätze","# imports available for # spots"],"N. #":["N° #","Nr. #","No. #"]};
+const UI = {"# anni":["# ans","# Jahre","# years"],"# di troppo: uno resta in tribuna":["# de trop : un reste en tribune","# zu viel: einer bleibt auf der Tribüne","# too many: one sits out"],"# di troppo: # restano in tribuna":["# de trop : # restent en tribune","# zu viel: # bleiben auf der Tribüne","# too many: # sit out"],"# disponibili su #":["# disponibles sur #","# von # verfügbar","# of # available"],"# giocatori in # squadre":["# joueurs dans # équipes","# Spieler in # Teams","# players in # teams"],"# giocatore in # squadra":["# joueur dans # équipe","# Spieler in # Team","# player in # team"],"# giocatori in # squadra":["# joueurs dans # équipe","# Spieler in # Team","# players in # team"],"# giorni":["# jours","# Tage","# days"],"# giorno":["# jour","# Tag","# day"],"# partita":["# match","# Spiel","# game"],"# partite":["# matchs","# Spiele","# games"],"# partite di fila":["# matchs d'affilée","# Spiele in Folge","# games in a row"],"#+ partite di fila":["#+ matchs d'affilée","#+ Spiele in Folge","#+ games in a row"],"# pt in # gare":["# pts en # matchs","# Pkt. in # Spielen","# pts in # games"],"# rose":["# effectifs","# Kader","# rosters"],"# rosa":["# effectif","# Kader","# roster"],"# su #":["# sur #","# von #","# of #"],"#+# punti":["#+# points","#+# Punkte","#+# points"],"#,#% parate":["#,#% d'arrêts","#,#% Paraden","#.#% saves"],"#/# da titolare":["#/# comme titulaire","#/# als Stammgoalie","#/# as starter"],"#/# presenze":["#/# présences","#/# Einsätze","#/# appearances"],"#/# scontate":["#/# purgés","#/# abgesessen","#/# served"],"# PG · # G · # A":["# MJ · # B · # A","# Sp. · # T · # A","# GP · # G · # A"],"# PG · #,#% parate":["# MJ · #,#% d'arrêts","# Sp. · #,#% Paraden","# GP · #.#% saves"],"punti in # PG":["points en # MJ","Punkte in # Sp.","points in # GP"],"#–# settimane (# @ – # @)":["#–# semaines (# @ – # @)","#–# Wochen (# @ – # @)","#–# weeks (# @ – # @)"],"#–# settimane di stop (# @ – # @)":["#–# semaines d'arrêt (# @ – # @)","#–# Wochen Pause (# @ – # @)","#–# weeks out (# @ – # @)"],"Rientro previsto nella settimana del #.# (# @ – # @)":["Retour prévu dans la semaine du #.# (# @ – # @)","Rückkehr in der Woche vom #.# erwartet (# @ – # @)","Expected back in the week of #.# (# @ – # @)"],"#:# d.r.":["#:# tab","#:# n.P.","#:# SO"],"#:# d.t.s.":["#:# prol.","#:# n.V.","#:# OT"],"+ Aggiungi a La mia rosa":["+ Ajouter à Mon effectif","+ Zu Mein Kader hinzufügen","+ Add to My roster"],"+ Nuova rosa":["+ Nouvel effectif","+ Neuer Kader","+ New roster"],"A referto":["Sur la feuille de match","Im Aufgebot","In the lineup"],"A referto nell'ultima partita":["Sur la feuille du dernier match","Im Aufgebot beim letzten Spiel","In the lineup last game"],"A referto nell'ultima partita (# stranieri disponibili per # posti)":["Sur la feuille du dernier match (# étrangers disponibles pour # places)","Im Aufgebot beim letzten Spiel (# Ausländer verfügbar für # Plätze)","In the lineup last game (# imports available for # spots)"],"A referto: # gol, # assist, #' sul ghiaccio":["Sur la feuille : # but(s), # assist(s), #' de glace","Im Aufgebot: # Tore, # Assists, #' Eiszeit","In the lineup: # goals, # assists, #' on ice"],"A rischio tribuna":["Risque la tribune","Tribüne droht","May sit out"],"Aggiungi un giocatore a La mia rosa":["Ajouter un joueur à Mon effectif","Spieler zu Mein Kader hinzufügen","Add a player to My roster"],"Annulla":["Annuler","Abbrechen","Cancel"],"Apri la rosa":["Ouvrir l'effectif","Kader öffnen","Open roster"],"Assist":["Assists","Assists","Assists"],"Attaccante":["Attaquant","Stürmer","Forward"],"Attaccanti":["Attaquants","Stürmer","Forwards"],"Difensori":["Défenseurs","Verteidiger","Defensemen"],"Portieri":["Gardiens","Torhüter","Goaltenders"],"Automatico":["Automatique","Automatisch","Automatic"],"Cerca giocatore":["Chercher un joueur","Spieler suchen","Search player"],"Cerca un giocatore da aggiungere":["Chercher un joueur à ajouter","Spieler zum Hinzufügen suchen","Search a player to add"],"Cerca un giocatore da aggiungere…":["Chercher un joueur à ajouter…","Spieler zum Hinzufügen suchen…","Search a player to add…"],"Chi manca in National League":["Qui manque en National League","Wer in der National League fehlt","Who's missing in the National League"],"Chiaro":["Clair","Hell","Light"],"Scuro":["Sombre","Dunkel","Dark"],"Tema":["Thème","Design","Theme"],"Tema: automatico":["Thème : automatique","Design: automatisch","Theme: automatic"],"Tema: chiaro":["Thème : clair","Design: hell","Theme: light"],"Tema: scuro":["Thème : sombre","Design: dunkel","Theme: dark"],"come il dispositivo":["comme l'appareil","wie das Gerät","same as device"],"Chiudi":["Fermer","Schliessen","Close"],"Classifica":["Classement","Rang","Standing"],"Crea una o più rose, per esempio quella del fantahockey: per ogni giocatore vedi subito se è disponibile, il bollettino medico, le ultime # partite e quando gioca.":["Crée un ou plusieurs effectifs, par exemple celui de ton fantasy hockey : pour chaque joueur tu vois tout de suite s'il est disponible, le bulletin médical, les # derniers matchs et quand il joue.","Erstelle einen oder mehrere Kader, zum Beispiel dein Fantasy-Hockey-Team: Für jeden Spieler siehst du sofort, ob er verfügbar ist, den medizinischen Bericht, die letzten # Spiele und wann er spielt.","Create one or more rosters, for example your fantasy hockey team: for each player you instantly see whether he's available, the medical report, the last # games and when he plays."],"Da valutare":["À évaluer","Offen","To be assessed"],"Da valutare: #":["À évaluer : #","Offen: #","To be assessed: #"],"Data della prima partita di nuovo a referto.":["Date du premier match de retour sur la feuille.","Datum des ersten Spiels wieder im Aufgebot.","Date of the first game back in the lineup."],"Data non nota":["Date inconnue","Datum unbekannt","Date unknown"],"data non nota":["date inconnue","Datum unbekannt","date unknown"],"Difensore":["Défenseur","Verteidiger","Defenseman"],"Disponibile":["Disponible","Verfügbar","Available"],"disponibili":["disponibles","verfügbar","available"],"Elenco completo":["Liste complète","Vollständige Liste","Full list"],"dati al":["données au","Stand","data as of"],"Elimina rosa":["Supprimer l'effectif","Kader löschen","Delete roster"],"Fermo da più tempo":["Absent depuis le plus longtemps","Am längsten ausgefallen","Out the longest"],"Fermo dal":["Absent depuis","Ausfall seit","Out since"],"Filtra per gravità":["Filtrer par gravité","Nach Schwere filtern","Filter by severity"],"Filtra squadre":["Filtrer les équipes","Teams filtern","Filter teams"],"Fuori dai convocati":["Hors de l'alignement","Nicht im Aufgebot","Not in the lineup"],"Giocatore":["Joueur","Spieler","Player"],"Giocatori trovati":["Joueurs trouvés","Gefundene Spieler","Players found"],"Giorno per giorno":["Au jour le jour","Von Tag zu Tag","Day-to-day"],"Giorno per giorno: #":["Au jour le jour : #","Von Tag zu Tag: #","Day-to-day: #"],"Gli indisponibili con più punti in questa stagione. Tocca un giocatore per la scheda completa.":["Les absents avec le plus de points cette saison. Touche un joueur pour sa fiche complète.","Die Ausfälle mit den meisten Punkten dieser Saison. Tippe auf einen Spieler für das ganze Profil.","The missing players with the most points this season. Tap a player for the full card."],"Gol":["Buts","Tore","Goals"],"Il prossimo impegno di ogni giocatore di questa rosa; il pallino indica lo stato.":["Le prochain match de chaque joueur de cet effectif ; la pastille indique son statut.","Das nächste Spiel jedes Spielers in diesem Kader; der Punkt zeigt den Status.","The next game of every player on this roster; the dot shows the status."],"In sovrannumero nell'ultima partita":["En surnombre lors du dernier match","Überzählig beim letzten Spiel","Extra import last game"],"In tribuna per sovrannumero":["En tribune pour surnombre","Überzählig auf der Tribüne","Sat out as extra import"],"Indisponibili":["Absents","Ausfälle","Unavailable"],"Indisponibili per squadra":["Absents par équipe","Ausfälle pro Team","Unavailable by team"],"indisponibili":["absents","Ausfälle","unavailable"],"Infortunato":["Blessé","Verletzt","Injured"],"Infortuni":["Blessures","Verletzungen","Injuries"],"Infortuni:":["Blessures :","Verletzungen:","Injuries:"],"Infortunio":["Blessure","Verletzung","Injury"],"La mia rosa":["Mon effectif","Mein Kader","My roster"],"La mia rosa è ancora vuota":["Mon effectif est encore vide","Mein Kader ist noch leer","My roster is still empty"],"Rosa #":["Effectif #","Kader #","Roster #"],"Rosa # è ancora vuota":["Effectif # est encore vide","Kader # ist noch leer","Roster # is still empty"],"Aggiungi un giocatore a Rosa #":["Ajouter un joueur à Effectif #","Spieler zu Kader # hinzufügen","Add a player to Roster #"],"Le assenze più pesanti":["Les absences les plus lourdes","Die schwersten Ausfälle","The biggest absences"],"Le mie rose":["Mes effectifs","Meine Kader","My rosters"],"Rose":["Effectifs","Kader","Rosters"],"Le mie rose.":["Mes effectifs.","Meine Kader.","My rosters."],"Le tue rose":["Tes effectifs","Deine Kader","Your rosters"],"Le tue rose sono salvate in questo browser e, quando apri la pagina con il tuo account Claude, anche nel tuo spazio privato di questa pagina: le ritrovi sugli altri dispositivi e nessun altro può leggerle.":["Tes effectifs sont enregistrés dans ce navigateur et, quand tu ouvres la page avec ton compte Claude, aussi dans ton espace privé de cette page : tu les retrouves sur tes autres appareils et personne d'autre ne peut les lire.","Deine Kader werden in diesem Browser gespeichert und, wenn du die Seite mit deinem Claude-Konto öffnest, auch in deinem privaten Bereich dieser Seite: Du findest sie auf deinen anderen Geräten wieder, und niemand sonst kann sie lesen.","Your rosters are saved in this browser and, when you open the page with your Claude account, also in your private space for this page: you'll find them on your other devices and nobody else can read them."],"Le tue rose sono salvate in questo browser: le ritrovi quando torni su questa pagina dallo stesso dispositivo.":["Tes effectifs sont enregistrés dans ce navigateur : tu les retrouves quand tu reviens sur cette page depuis le même appareil.","Deine Kader werden in diesem Browser gespeichert: Du findest sie wieder, wenn du die Seite auf demselben Gerät öffnest.","Your rosters are saved in this browser: you'll find them again when you come back to this page on the same device."],"Legenda completa nella sezione":["Légende complète dans la section","Vollständige Legende im Bereich","Full legend in the section"],"Lo stato è calcolato dai dati al #.#.#: «Disponibile» significa nessuna segnalazione medica e presenza a referto nell'ultima partita, non una garanzia che giocherà.":["Le statut est calculé avec les données au #.#.# : « Disponible » signifie aucun signalement médical et présent sur la feuille du dernier match, pas une garantie qu'il jouera.","Der Status basiert auf den Daten vom #.#.#: «Verfügbar» heisst keine medizinische Meldung und im Aufgebot beim letzten Spiel, aber keine Garantie, dass er spielt.","Status is based on the data as of #.#.#: \"Available\" means no medical report and in the lineup last game, not a guarantee that he'll play."],"Lungo termine":["Long terme","Langzeit","Long-term"],"Lungo termine: #":["Long terme : #","Langzeit: #","Long-term: #"],"Malato":["Malade","Krank","Ill"],"Malattia":["Maladie","Krankheit","Illness"],"Malattia: #":["Maladie : #","Krankheit: #","Illness: #"],"Massimo # stranieri a referto per partita":["Maximum # étrangers sur la feuille par match","Maximal # Ausländer pro Spiel im Aufgebot","Maximum # imports in the lineup per game"],"Mostra tutti (#)":["Tout afficher (#)","Alle anzeigen (#)","Show all (#)"],"Mostra meno":["Afficher moins","Weniger anzeigen","Show less"],"Motivo non noto":["Motif inconnu","Grund unbekannt","Reason unknown"],"National League #/#":["National League #/#","National League #/#","National League #/#"],"Nessun giocatore trovato. Prova con il solo cognome.":["Aucun joueur trouvé. Essaie avec le nom de famille seul.","Kein Spieler gefunden. Versuche es nur mit dem Nachnamen.","No player found. Try the last name only."],"Nessun infortunio o malattia segnalati dalle fonti alla data dell'aggiornamento.":["Aucune blessure ni maladie signalée par les sources à la date de la mise à jour.","Keine Verletzung oder Krankheit von den Quellen zum Stand der Aktualisierung gemeldet.","No injury or illness reported by the sources as of the update."],"Nessun rientro dopo la pausa.":["Aucun retour après la pause.","Keine Rückkehr nach der Pause.","No returns after the break."],"Nessun rientro datato nelle prossime settimane.":["Aucun retour daté dans les prochaines semaines.","Keine datierte Rückkehr in den nächsten Wochen.","No dated returns in the coming weeks."],"Nessuna presenza in National League in questa stagione.":["Aucun match de National League cette saison.","Kein Einsatz in der National League in dieser Saison.","No National League games this season."],"Nessuna presenza in stagione":["Aucun match cette saison","Kein Einsatz in dieser Saison","No games this season"],"Nessuna squalifica recente.":["Aucune suspension récente.","Keine aktuellen Sperren.","No recent suspensions."],"Nessuna segnalazione attiva per questo giocatore.":["Aucun signalement en cours pour ce joueur.","Keine aktuelle Meldung für diesen Spieler.","Nothing reported for this player right now."],"Nessun giocatore corrisponde ai filtri. Prova a togliere un filtro o a cambiare la ricerca.":["Aucun joueur ne correspond aux filtres. Essaie d'enlever un filtre ou de changer la recherche.","Kein Spieler entspricht den Filtern. Entferne einen Filter oder ändere die Suche.","No player matches the filters. Try removing a filter or changing the search."],"Infermeria vuota: nessun infortunato segnalato e tutti i titolari erano a referto nell'ultima partita.":["Infirmerie vide : aucun blessé signalé et tous les titulaires étaient sur la feuille du dernier match.","Krankenstation leer: keine Verletzten gemeldet, alle Stammspieler waren beim letzten Spiel im Aufgebot.","Infirmary empty: no injuries reported and all regulars were in the lineup last game."],"Statistiche stagionali non disponibili.":["Statistiques de la saison non disponibles.","Saisonstatistiken nicht verfügbar.","Season stats not available."],"Nome della rosa":["Nom de l'effectif","Name des Kaders","Roster name"],"Nome o infortunio":["Nom ou blessure","Name oder Verletzung","Name or injury"],"Non più in rosa":["Plus dans l'effectif","Nicht mehr im Kader","No longer on the roster"],"Non a referto":["Pas sur la feuille de match","Nicht im Aufgebot","Not in the lineup"],"Non a referto nell'ultima partita, motivo non comunicato":["Pas sur la feuille du dernier match, motif non communiqué","Beim letzten Spiel nicht im Aufgebot, Grund nicht bekannt gegeben","Not in the lineup last game, reason not given"],"Mai a referto nelle ultime # partite, motivo non comunicato":["Jamais sur la feuille lors des # derniers matchs, motif non communiqué","In den letzten # Spielen nie im Aufgebot, Grund nicht bekannt gegeben","Not in the lineup in the last # games, reason not given"],"Portiere di riserva nell'ultima partita":["Gardien remplaçant lors du dernier match","Ersatzgoalie beim letzten Spiel","Backup goalie last game"],"Nuova rosa creata: scegli un nome e aggiungi i giocatori.":["Nouvel effectif créé : choisis un nom et ajoute des joueurs.","Neuer Kader erstellt: Wähle einen Namen und füge Spieler hinzu.","New roster created: pick a name and add players."],"Off the Ice, panoramica":["Off the Ice, aperçu","Off the Ice, Übersicht","Off the Ice, overview"],"Ordina per":["Trier par","Sortieren nach","Sort by"],"Panoramica":["Aperçu","Übersicht","Overview"],"Partite":["Matchs","Spiele","Games"],"Per ogni straniero, cosa è successo nelle ultime # partite della sua squadra e perché era eventualmente assente.":["Pour chaque étranger, ce qui s'est passé lors des # derniers matchs de son équipe et pourquoi il était éventuellement absent.","Für jeden Ausländer: was in den letzten # Spielen seines Teams passiert ist und warum er allenfalls fehlte.","For each import, what happened in his team's last # games and why he was missing, if he was."],"Per provare subito, i migliori marcatori della stagione:":["Pour essayer tout de suite, les meilleurs marqueurs de la saison :","Zum direkten Ausprobieren, die Topskorer der Saison:","To try it right away, the season's top scorers:"],"Per punti in stagione":["Par points cette saison","Nach Saisonpunkten","By season points"],"Portiere":["Gardien","Torhüter","Goaltender"],"Portiere di riserva":["Gardien remplaçant","Ersatzgoalie","Backup goalie"],"Prossima":["Prochain","Nächstes","Next"],"Prossima partita":["Prochain match","Nächstes Spiel","Next game"],"Punti":["Points","Punkte","Points"],"Punti in stagione":["Points cette saison","Saisonpunkte","Season points"],"Quando giocano":["Quand ils jouent","Wann sie spielen","When they play"],"Raggruppa per":["Grouper par","Gruppieren nach","Group by"],"Rientrati di recente":["Retours récents","Kürzlich zurück","Recently back"],"Rientrato":["De retour","Zurück","Back"],"Rientri attesi a breve":["Retours attendus bientôt","Bald erwartete Rückkehrer","Expected back soon"],"Rientro":["Retour","Rückkehr","Return"],"Rientro più vicino":["Retour le plus proche","Nächste Rückkehr","Soonest return"],"Rientro previsto":["Retour prévu","Erwartete Rückkehr","Expected return"],"Rinomina":["Renommer","Umbenennen","Rename"],"Ruolo":["Poste","Position","Position"],"Saltate":["Manqués","Verpasst","Missed"],"Salva":["Enregistrer","Speichern","Save"],"Scegli la squadra":["Choisis l'équipe","Wähle das Team","Pick a team"],"il numero indica gli indisponibili":["le nombre indique les absents","die Zahl zeigt die Ausfälle","the number shows who's out"],"Scheda giocatore":["Fiche joueur","Spielerprofil","Player card"],"Scrivi un cognome nel campo qui sopra e scegli il giocatore: comparirà qui con stato, ultime # partite e prossimo impegno. Puoi aggiungerlo anche dalla scheda di qualsiasi giocatore.":["Écris un nom de famille dans le champ ci-dessus et choisis le joueur : il apparaîtra ici avec son statut, ses # derniers matchs et son prochain match. Tu peux aussi l'ajouter depuis la fiche de n'importe quel joueur.","Schreibe einen Nachnamen ins Feld oben und wähle den Spieler: Er erscheint hier mit Status, den letzten # Spielen und dem nächsten Spiel. Du kannst ihn auch über das Profil jedes Spielers hinzufügen.","Type a last name in the field above and pick the player: he'll show up here with his status, last # games and next game. You can also add him from any player's card."],"Sei caselle = sei posti a referto. Con più di # disponibili qualcuno resta fuori.":["Six cases = six places sur la feuille. Avec plus de # disponibles, quelqu'un reste dehors.","Sechs Felder = sechs Plätze im Aufgebot. Mit mehr als # Verfügbaren bleibt jemand draussen.","Six boxes = six lineup spots. With more than # available, someone sits out."],"Settimane":["Semaines","Wochen","Weeks"],"Settimane: #":["Semaines : #","Wochen: #","Weeks: #"],"Sezioni":["Sections","Bereiche","Sections"],"Solo con sovrannumero":["Seulement avec surnombre","Nur mit Überzähligen","Only with extra imports"],"Solo con stranieri assenti":["Seulement avec étrangers absents","Nur mit fehlenden Ausländern","Only with imports missing"],"Solo stranieri":["Étrangers seulement","Nur Ausländer","Imports only"],"Sovrannumero":["Surnombre","Überzählig","Extra import"],"Squadra":["Équipe","Team","Team"],"Squadre":["Équipes","Teams","Teams"],"Squalificato":["Suspendu","Gesperrt","Suspended"],"Squalifiche":["Suspensions","Sperren","Suspensions"],"Stagione finita":["Saison terminée","Saison vorbei","Season over"],"Stagione finita: #":["Saison terminée : #","Saison vorbei: #","Season over: #"],"Stato":["Statut","Status","Status"],"Stop più recente":["Arrêt le plus récent","Neuester Ausfall","Most recent"],"Stranieri":["Étrangers","Ausländer","Imports"],"Stranieri disponibili":["Étrangers disponibles","Verfügbare Ausländer","Imports available"],"Stranieri disponibili al prossimo turno":["Étrangers disponibles au prochain match","Verfügbare Ausländer für die nächste Runde","Imports available for the next game"],"Stranieri nelle ultime # partite":["Étrangers lors des # derniers matchs","Ausländer in den letzten # Spielen","Imports in the last # games"],"Stranieri: chi gioca e chi resta in tribuna":["Étrangers : qui joue et qui reste en tribune","Ausländer: wer spielt und wer auf der Tribüne sitzt","Imports: who plays and who sits out"],"Straniero":["Étranger","Ausländer","Import"],"Svuota rosa":["Vider l'effectif","Kader leeren","Clear roster"],"Annulla rosa":["Annuler","Abbrechen","Cancel"],"Sì, svuota":["Oui, vider","Ja, leeren","Yes, clear"],"Sì, elimina":["Oui, supprimer","Ja, löschen","Yes, delete"],"Tocca una casella per il dettaglio della partita, o un nome per la scheda del giocatore.":["Touche une case pour le détail du match, ou un nom pour la fiche du joueur.","Tippe auf ein Feld für Spieldetails oder auf einen Namen für das Spielerprofil.","Tap a box for the game details, or a name for the player card."],"Togli dalla rosa":["Retirer de l'effectif","Aus dem Kader entfernen","Remove from roster"],"Togli":["Retirer","Entfernen","Remove"],"Tutte":["Toutes","Alle","All"],"Tutte le squadre":["Toutes les équipes","Alle Teams","All teams"],"Tutti":["Tous","Alle","All"],"Tutti gli infortuni":["Toutes les blessures","Alle Verletzungen","All injuries"],"Tutti i giocatori fermi per infortunio o malattia nelle # squadre, con motivo, durata e rientro previsto, verificati sulle formazioni delle ultime partite.":["Tous les joueurs à l'arrêt pour blessure ou maladie dans les # équipes, avec motif, durée et retour prévu, vérifiés sur les alignements des derniers matchs.","Alle wegen Verletzung oder Krankheit ausfallenden Spieler der # Teams, mit Grund, Dauer und erwarteter Rückkehr, überprüft anhand der Aufstellungen der letzten Spiele.","Every player out injured or ill across the # teams, with reason, length and expected return, checked against the lineups of the latest games."],"Ultime #":["# derniers","Letzte #","Last #"],"Ultime # partite":["# derniers matchs","Letzte # Spiele","Last # games"],"Ultime # partite di ogni squadra.":["# derniers matchs de chaque équipe.","Letzte # Spiele jedes Teams.","Each team's last # games."],"Ultimi stop":["Derniers arrêts","Neueste Ausfälle","Latest absences"],"Medical Report di sport.ch":["Medical Report de sport.ch","Medical Report von sport.ch","sport.ch Medical Report"],"bollettini di swisshockeynews.ch":["bulletins de swisshockeynews.ch","Bulletins von swisshockeynews.ch","swisshockeynews.ch reports"],"con la stagione finita":["avec la saison terminée","mit beendeter Saison","out for the season"],"da verificare":["à vérifier","zu prüfen","to check"],"giocatori in rosa":["joueurs dans l'effectif","Spieler im Kader","players on the roster"],"giocatori indisponibili":["joueurs absents","Spieler fallen aus","players unavailable"],"nuovi stop dal # §":["nouveaux arrêts depuis le # §","neue Ausfälle seit dem #. §","new absences since § #"],"partita":["match","Spiel","game"],"partite":["matchs","Spiele","games"],"partite di fila":["matchs d'affilée","Spiele in Folge","games in a row"],"salvate su questo dispositivo":["enregistrés sur cet appareil","auf diesem Gerät gespeichert","saved on this device"],"salvate nel tuo account":["enregistrés dans ton compte","in deinem Konto gespeichert","saved in your account"],"account non raggiungibile, per ora salvate su questo dispositivo":["compte inaccessible, enregistrés pour l'instant sur cet appareil","Konto nicht erreichbar, vorerst auf diesem Gerät gespeichert","account unreachable, saved on this device for now"],"sono stranieri":["sont étrangers","sind Ausländer","are imports"],"stop nell'ultima gara":["absent lors du dernier match","Ausfall im letzten Spiel","out last game"],"tutti a referto":["tous sur la feuille","alle im Aufgebot","all in the lineup"],"# posti liberi":["# places libres","# freie Plätze","# open spots"],"# posto libero":["# place libre","# freier Platz","# open spot"],"«Saltate» conta le partite consecutive mancate fino all'ultima giocata dalla squadra; il segno + indica che il giocatore non compare a referto dal # §.":["« Manqués » compte les matchs consécutifs manqués jusqu'au dernier joué par l'équipe ; le signe + indique que le joueur n'apparaît plus sur la feuille depuis le # §.","«Verpasst» zählt die aufeinanderfolgenden verpassten Spiele bis zum letzten Spiel des Teams; das Zeichen + bedeutet, dass der Spieler seit dem #. § nicht mehr im Aufgebot steht.","\"Missed\" counts the consecutive games missed up to the team's latest game; the + sign means the player hasn't been in a lineup since § #."],"«Sovrannumero» è dedotto dalle formazioni: la squadra ha schierato # stranieri e per il giocatore escluso non risultano infortuni, malattie o squalifiche. I club non comunicano ufficialmente il motivo.":["« Surnombre » est déduit des alignements : l'équipe a aligné # étrangers et pour le joueur écarté il n'y a ni blessure, ni maladie, ni suspension. Les clubs ne communiquent pas officiellement le motif.","«Überzählig» wird aus den Aufstellungen abgeleitet: Das Team hat # Ausländer eingesetzt, und für den nicht eingesetzten Spieler ist keine Verletzung, Krankheit oder Sperre bekannt. Die Clubs geben den Grund nicht offiziell bekannt.","\"Extra import\" is inferred from the lineups: the team dressed # imports and the player left out has no reported injury, illness or suspension. Clubs don't officially give the reason."],"# giocatori: # disponibili, # da verificare, # indisponibili":["# joueurs : # disponibles, # à vérifier, # absents","# Spieler: # verfügbar, # zu prüfen, # fallen aus","# players: # available, # to check, # unavailable"],"aggiungi i tuoi giocatori per vedere subito chi è disponibile":["ajoute tes joueurs pour voir tout de suite qui est disponible","füge deine Spieler hinzu und sieh sofort, wer verfügbar ist","add your players to instantly see who's available"],"# stranieri disponibili per # posti; #× in sovrannumero nelle ultime #":["# étrangers disponibles pour # places ; #× en surnombre lors des # derniers","# Ausländer verfügbar für # Plätze; #× überzählig in den letzten #","# imports available for # spots; #× extra in the last #"],"Fonti.":["Sources.","Quellen.","Sources."],"Fonti:":["Sources :","Quellen:","Sources:"],"Metodo.":["Méthode.","Methode.","Method."],"Personaggini.":["Personnages.","Figuren.","Figures."],"I personaggini dei giocatori sono illustrazioni originali create per Off the Ice e non ritraggono fedelmente i giocatori; le statistiche stagionali provengono da":["Les personnages des joueurs sont des illustrations originales créées pour Off the Ice et ne les représentent pas fidèlement ; les statistiques de la saison proviennent de","Die Spielerfiguren sind eigens für Off the Ice gezeichnete Illustrationen und keine genauen Porträts; die Saisonstatistiken stammen von","The player figures are original illustrations made for Off the Ice and are not exact likenesses; season stats come from"],"(stato #.#.#),":["(état au #.#.#),","(Stand #.#.#),","(as of #.#.#),"],"(fino al #.#.#) e":["(jusqu'au #.#.#) et","(bis #.#.#) und","(up to #.#.#) and"],"(#.#.#). Formazioni e risultati:":["(#.#.#). Alignements et résultats :","(#.#.#). Aufstellungen und Resultate:","(#.#.#). Lineups and results:"],". Rose e licenze straniere: swisshockeynews.ch. Squalifiche: decisioni della National League riportate da swisshockeynews.ch.":[". Effectifs et licences étrangères : swisshockeynews.ch. Suspensions : décisions de la National League relayées par swisshockeynews.ch.",". Kader und Ausländerlizenzen: swisshockeynews.ch. Sperren: Entscheide der National League, gemeldet von swisshockeynews.ch.",". Rosters and import licences: swisshockeynews.ch. Suspensions: National League decisions as reported by swisshockeynews.ch."],"Ogni nome è stato confrontato con le formazioni di":["Chaque nom a été comparé aux alignements de","Jeder Name wurde mit den Aufstellungen von","Every name was checked against the lineups of"],"partite giocate tra il #.# e il #.#.#: chi figurava infortunato ma è sceso in pista nell'ultima gara è stato tolto dall'elenco. I club comunicano poco sugli infortuni, quindi molte diagnosi restano generiche. Le fonti vengono controllate automaticamente due volte al giorno, al mattino e dopo le partite serali, e la pagina si aggiorna quando ci sono novità; la data in alto indica l'ultimo aggiornamento.":["matchs joués entre le #.# et le #.#.# : qui figurait comme blessé mais a joué le dernier match a été retiré de la liste. Les clubs communiquent peu sur les blessures, donc beaucoup de diagnostics restent vagues. Les sources sont vérifiées automatiquement deux fois par jour, le matin et après les matchs du soir, et la page se met à jour quand il y a du nouveau ; la date en haut indique la dernière mise à jour.","Spielen zwischen dem #.# und dem #.#.# verglichen: Wer als verletzt galt, aber im letzten Spiel auf dem Eis stand, wurde von der Liste entfernt. Die Clubs informieren wenig über Verletzungen, daher bleiben viele Diagnosen vage. Die Quellen werden zweimal täglich automatisch geprüft, am Morgen und nach den Abendspielen, und die Seite wird bei Neuigkeiten aktualisiert; das Datum oben zeigt die letzte Aktualisierung.","games played between #.# and #.#.#: anyone listed as injured who played in the latest game was removed from the list. Clubs say little about injuries, so many diagnoses stay vague. Sources are checked automatically twice a day, in the morning and after the evening games, and the page updates when there's news; the date at the top shows the latest update."],"#.#.#, ore #:#":["#.#.#, #h#","#.#.#, #:# Uhr","#.#.#, #:#"],"#.#.#, ore #:#, in casa con":["#.#.#, #h#, à domicile contre","#.#.#, #:# Uhr, zu Hause gegen","#.#.#, #:#, at home vs"],"Di nuovo a referto dal":["De nouveau sur la feuille depuis le","Wieder im Aufgebot seit","Back in the lineup since"],"Anche in:":["Aussi dans :","Auch in:","Also in:"],"✓ in rosa":["✓ dans l'effectif","✓ im Kader","✓ on roster"],"Lingua":["Langue","Sprache","Language"],"Lingua: italiano":["Langue : italien","Sprache: Italienisch","Language: Italian"],"INF":["BLE","VER","INJ"],"MAL":["MAL","KRA","ILL"],"SQ":["SUS","SPE","SUS"],"SN":["SUR","ÜZ","EXT"],"R":["R","E","B"],"A":["A","S","F"],"P":["G","T","G"],"V":["V","S","W"],"S":["D","N","L"],"Modifica annullata.":["Modification annulée.","Änderung rückgängig gemacht.","Change undone."],"Una rosa può contenere al massimo # giocatori.":["Un effectif peut contenir au maximum # joueurs.","Ein Kader kann höchstens # Spieler enthalten.","A roster can hold at most # players."],"Puoi creare al massimo # rose.":["Tu peux créer au maximum # effectifs.","Du kannst höchstens # Kader erstellen.","You can create at most # rosters."],"In porta da titolare":["Titulaire dans les buts","Als Stammgoalie im Tor","Started in goal"],"A referto come portiere di riserva":["Sur la feuille comme gardien remplaçant","Als Ersatzgoalie im Aufgebot","Dressed as backup goalie"],"Ha lasciato la squadra":["A quitté l'équipe","Hat das Team verlassen","Left the team"],"Squalifica scontata":["Suspension purgée","Sperre abgesessen","Suspension served"],"# stranieri disponibili per # posti":["# étrangers disponibles pour # places","# Ausländer verfügbar für # Plätze","# imports available for # spots"],"N. #":["N° #","Nr. #","No. #"],"Trasferisci rose":["Transférer les effectifs","Kader übertragen","Transfer rosters"],"Porta le rose su un altro dispositivo":["Transférer tes effectifs sur un autre appareil","Kader auf ein anderes Gerät übertragen","Move your rosters to another device"],"Inquadra il codice con la fotocamera dell'altro dispositivo, oppure mandagli il link. Le rose vengono copiate lì; le modifiche successive non si sincronizzano da sole.":["Scanne le code avec l'appareil photo de l'autre appareil, ou envoie-lui le lien. Les effectifs y sont copiés ; les modifications suivantes ne se synchronisent pas toutes seules.","Scanne den Code mit der Kamera des anderen Geräts oder schick ihm den Link. Die Kader werden dorthin kopiert; spätere Änderungen werden nicht automatisch synchronisiert.","Scan the code with the other device's camera, or send it the link. The rosters are copied there; later changes don't sync on their own."],"Link per l'altro dispositivo":["Lien pour l'autre appareil","Link für das andere Gerät","Link for the other device"],"Copia link":["Copier le lien","Link kopieren","Copy link"],"Condividi":["Partager","Teilen","Share"],"Link copiato.":["Lien copié.","Link kopiert.","Link copied."],"Seleziona il link e copialo.":["Sélectionne le lien et copie-le.","Markiere den Link und kopiere ihn.","Select the link and copy it."],"Troppi giocatori per il codice QR: usa il link.":["Trop de joueurs pour le code QR : utilise le lien.","Zu viele Spieler für den QR-Code: Nutze den Link.","Too many players for the QR code: use the link."],"Codice QR non disponibile: usa il link.":["Code QR indisponible : utilise le lien.","QR-Code nicht verfügbar: Nutze den Link.","QR code unavailable: use the link."],"Una rosa da un altro dispositivo":["Un effectif d'un autre appareil","Ein Kader von einem anderen Gerät","A roster from another device"],"# rose da un altro dispositivo":["# effectifs d'un autre appareil","# Kader von einem anderen Gerät","# rosters from another device"],"Aggiungi alle mie rose":["Ajouter à mes effectifs","Zu meinen Kadern hinzufügen","Add to my rosters"],"Sostituisci le mie rose":["Remplacer mes effectifs","Meine Kader ersetzen","Replace my rosters"],"Importa":["Importer","Importieren","Import"],"Ignora":["Ignorer","Ignorieren","Ignore"],"Rosa importata.":["Effectif importé.","Kader importiert.","Roster imported."],"# rose importate.":["# effectifs importés.","# Kader importiert.","# rosters imported."],"Queste rose sono già su questo dispositivo.":["Ces effectifs sont déjà sur cet appareil.","Diese Kader sind schon auf diesem Gerät.","These rosters are already on this device."]};
 const DATA = {"#–# mesi di stop":["#–# mois d'arrêt","#–# Monate Pause","#–# months out"],"#–# settimane":["#–# semaines","#–# Wochen","#–# weeks"],"#–# settimane dopo l'intervento dell'#.#":["#–# semaines après l'opération du #.#","#–# Wochen nach der Operation vom #.#","#–# weeks after surgery on #.#"],"#–# settimane (stima del #.#)":["#–# semaines (estimation du #.#)","#–# Wochen (Schätzung vom #.#)","#–# weeks (estimate of #.#)"],"#–# settimane di stop":["#–# semaines d'arrêt","#–# Wochen Pause","#–# weeks out"],"Ancora diverse settimane":["Encore plusieurs semaines","Noch mehrere Wochen","Several more weeks"],"Assente a Langnau il #.#; non è chiaro se il colpo abbia causato un infortunio.":["Absent à Langnau le #.# ; on ne sait pas si le coup a causé une blessure.","Fehlte am #.# in Langnau; unklar, ob der Check eine Verletzung verursacht hat.","Missed the game in Langnau on #.#; unclear whether the hit caused an injury."],"Assente contro ZSC Lions (#.#) e Langnau (#.#).":["Absent contre les ZSC Lions (#.#) et Langnau (#.#).","Fehlte gegen die ZSC Lions (#.#) und Langnau (#.#).","Missed games against the ZSC Lions (#.#) and Langnau (#.#)."],"Assente dalla ripresa dopo la pausa.":["Absent depuis la reprise après la pause.","Fehlt seit dem Wiederbeginn nach der Pause.","Out since play resumed after the break."],"Assente dalla ripresa dopo la pausa. Il #.# aveva subito una carica alla zona testa/collo da M. Graf (Lakers), squalificato per # giornate.":["Absent depuis la reprise après la pause. Le #.# il avait subi une charge à la tête/au cou de M. Graf (Lakers), suspendu # matchs.","Fehlt seit dem Wiederbeginn nach der Pause. Am #.# erhielt er einen Check gegen Kopf/Hals von M. Graf (Lakers), der für # Spiele gesperrt wurde.","Out since play resumed after the break. On #.# he took a head/neck hit from M. Graf (Lakers), suspended for # games."],"Assente nelle due partite dopo la pausa; non ancora nel bollettino ufficiale del club.":["Absent lors des deux matchs après la pause ; pas encore dans le bulletin officiel du club.","Fehlte in den zwei Spielen nach der Pause; noch nicht im offiziellen Bulletin des Clubs.","Missed both games after the break; not yet in the club's official report."],"Capitano; il suo # è già finito.":["Capitaine ; son # est déjà terminé.","Captain; sein # ist bereits vorbei.","Captain; his # is already over."],"Carica alla zona testa/collo di V. Pilet (Ajoie) il #.#":["Charge à la tête/au cou de V. Pilet (Ajoie) le #.#","Check gegen Kopf/Hals von V. Pilet (Ajoie) am #.#","Head/neck hit by V. Pilet (Ajoie) on #.#"],"Carica da dietro su N. Dünner (Lakers) il #.#":["Charge par derrière sur N. Dünner (Lakers) le #.#","Check von hinten gegen N. Dünner (Lakers) am #.#","Hit from behind on N. Dünner (Lakers) on #.#"],"Caviglia destra e adduttori":["Cheville droite et adducteurs","Rechter Knöchel und Adduktoren","Right ankle and adductors"],"Circa # settimane di stop":["Environ # semaines d'arrêt","Rund # Wochen Pause","About # weeks out"],"Circa # settimane (stima del #.#)":["Environ # semaines (estimation du #.#)","Rund # Wochen (Schätzung vom #.#)","About # weeks (estimate of #.#)"],"Circa # mesi di stop":["Environ # mois d'arrêt","Rund # Monate Pause","About # months out"],"Circa # settimane":["Environ # semaines","Rund # Wochen","About # weeks"],"Colpito da un pugno di D. Carr (Ajoie), squalificato # giornate. Al #.# non aveva ancora ripreso ad allenarsi.":["Touché par un coup de poing de D. Carr (Ajoie), suspendu # matchs. Au #.# il n'avait pas encore repris l'entraînement.","Von einem Faustschlag von D. Carr (Ajoie) getroffen, der für # Spiele gesperrt wurde. Am #.# hatte er das Training noch nicht wieder aufgenommen.","Punched by D. Carr (Ajoie), suspended for # games. As of #.# he hadn't resumed training."],"Colpito da una ginocchiata di S. Alatalo (Lugano), squalificato per una giornata.":["Touché par un coup de genou de S. Alatalo (Lugano), suspendu un match.","Von einem Kniecheck von S. Alatalo (Lugano) getroffen, der für ein Spiel gesperrt wurde.","Kneed by S. Alatalo (Lugano), suspended for one game."],"Commozione cerebrale":["Commotion cérébrale","Gehirnerschütterung","Concussion"],"Contratto a termine non rinnovato":["Contrat à durée déterminée non renouvelé","Befristeter Vertrag nicht verlängert","Short-term contract not renewed"],"Da valutare":["À évaluer","Offen","To be assessed"],"Da valutare (nessuna operazione)":["À évaluer (pas d'opération)","Offen (keine Operation)","To be assessed (no surgery)"],"Diagnosi in attesa":["Diagnostic en attente","Diagnose ausstehend","Diagnosis pending"],"Disco al volto (# punti di sutura)":["Puck au visage (# points de suture)","Puck ins Gesicht (# Stiche)","Puck to the face (# stitches)"],"Distorsione al piede":["Entorse au pied","Fussverstauchung","Sprained foot"],"Diversi mesi di stop":["Plusieurs mois d'arrêt","Mehrere Monate Pause","Several months out"],"Dopo la pausa per le nazionali di dicembre":["Après la pause internationale de décembre","Nach der Nationalmannschaftspause im Dezember","After the December international break"],"Durata dello stop non comunicata":["Durée de l'arrêt non communiquée","Ausfalldauer nicht kommuniziert","Length of absence not given"],"Durata dello stop non nota":["Durée de l'arrêt inconnue","Ausfalldauer unbekannt","Length of absence unknown"],"Era atteso tra inizio e metà novembre":["Il était attendu entre début et mi-novembre","Er wurde zwischen Anfang und Mitte November erwartet","Was expected back in early to mid November"],"Fermo da inizio stagione (infortunio contro l'Ajoie).":["Absent depuis le début de la saison (blessure contre Ajoie).","Fällt seit Saisonbeginn aus (Verletzung gegen Ajoie).","Out since the start of the season (injured against Ajoie)."],"Frattura del perone":["Fracture du péroné","Wadenbeinbruch","Fractured fibula"],"Frattura del perone (#.#)":["Fracture du péroné (#.#)","Wadenbeinbruch (#.#)","Fractured fibula (#.#)"],"Frattura del polso":["Fracture du poignet","Handgelenkbruch","Fractured wrist"],"Fuori da ottobre; data di rientro non definita.":["Absent depuis octobre ; date de retour non définie.","Fällt seit Oktober aus; Rückkehrdatum offen.","Out since October; no return date set."],"Ginocchiata ad A. Petersson (Langnau) il #.#":["Coup de genou à A. Petersson (Langnau) le #.#","Kniecheck gegen A. Petersson (Langnau) am #.#","Knee-on-knee on A. Petersson (Langnau) on #.#"],"Ginocchio destro":["Genou droit","Rechtes Knie","Right knee"],"Gomito (operato)":["Coude (opéré)","Ellbogen (operiert)","Elbow (surgery)"],"Ha saltato le ultime tre partite.":["Il a manqué les trois derniers matchs.","Hat die letzten drei Spiele verpasst.","Missed the last three games."],"Il rientro stimato cade a fine novembre.":["Le retour estimé tombe à fin novembre.","Die geschätzte Rückkehr fällt auf Ende November.","Estimated return falls at the end of November."],"In campo il #.# contro l'Ambrì, assente il giorno dopo ad Ajoie.":["Sur la glace le #.# contre Ambrì, absent le lendemain à Ajoie.","Am #.# gegen Ambrì im Einsatz, am Tag danach in Ajoie abwesend.","Played on #.# against Ambrì, missed the next day's game at Ajoie."],"In precedenza era valutato giorno per giorno.":["Auparavant il était évalué au jour le jour.","Zuvor wurde er von Tag zu Tag beurteilt.","Previously listed as day-to-day."],"Indisponibile a tempo indeterminato (dato del #.#)":["Indisponible pour une durée indéterminée (donnée du #.#)","Auf unbestimmte Zeit ausser Gefecht (Stand #.#)","Out indefinitely (as of #.#)"],"Infortunato a Davos.":["Blessé à Davos.","In Davos verletzt.","Injured in Davos."],"Infortunato alla prima giornata a Lugano; non ancora a referto dopo la pausa.":["Blessé lors de la première journée à Lugano ; pas encore sur la feuille après la pause.","Am ersten Spieltag in Lugano verletzt; nach der Pause noch nicht im Aufgebot.","Injured on opening day in Lugano; not yet in the lineup after the break."],"Infortunato in Champions Hockey League contro il Plzeň.":["Blessé en Champions Hockey League contre Plzeň.","In der Champions Hockey League gegen Plzeň verletzt.","Injured in the Champions Hockey League against Plzeň."],"Infortunato nel derby contro gli ZSC Lions.":["Blessé lors du derby contre les ZSC Lions.","Im Derby gegen die ZSC Lions verletzt.","Injured in the derby against the ZSC Lions."],"Infortunato nella partita con il Kloten del #.#. Il Friborgo cerca un settimo straniero.":["Blessé lors du match contre Kloten du #.#. Fribourg cherche un septième étranger.","Im Spiel gegen Kloten vom #.# verletzt. Freiburg sucht einen siebten Ausländer.","Injured in the game against Kloten on #.#. Fribourg is looking for a seventh import."],"Infortunato nella partita con il Losanna del #.#.":["Blessé lors du match contre Lausanne du #.#.","Im Spiel gegen Lausanne vom #.# verletzt.","Injured in the game against Lausanne on #.#."],"Infortunio (stop previsto di almeno # settimane)":["Blessure (arrêt prévu d'au moins # semaines)","Verletzung (Ausfall von mindestens # Wochen erwartet)","Injury (expected out at least # weeks)"],"Infortunio (stop previsto fino a fine novembre, rientro anticipato)":["Blessure (arrêt prévu jusqu'à fin novembre, retour anticipé)","Verletzung (Ausfall bis Ende November erwartet, frühere Rückkehr)","Injury (expected out until end of November, back early)"],"Infortunio al ginocchio":["Blessure au genou","Knieverletzung","Knee injury"],"Infortunio al ginocchio (#.#)":["Blessure au genou (#.#)","Knieverletzung (#.#)","Knee injury (#.#)"],"Infortunio al gomito":["Blessure au coude","Ellbogenverletzung","Elbow injury"],"Infortunio al gomito (#.#)":["Blessure au coude (#.#)","Ellbogenverletzung (#.#)","Elbow injury (#.#)"],"Infortunio al mento":["Blessure au menton","Kinnverletzung","Chin injury"],"Infortunio alla gamba":["Blessure à la jambe","Beinverletzung","Leg injury"],"Infortunio alla mano":["Blessure à la main","Handverletzung","Hand injury"],"Infortunio alla mano (#.#)":["Blessure à la main (#.#)","Handverletzung (#.#)","Hand injury (#.#)"],"Infortunio alla spalla":["Blessure à l'épaule","Schulterverletzung","Shoulder injury"],"Infortunio alla spalla (#.#)":["Blessure à l'épaule (#.#)","Schulterverletzung (#.#)","Shoulder injury (#.#)"],"Infortunio che ha richiesto un'operazione":["Blessure ayant nécessité une opération","Verletzung, die operiert werden musste","Injury that required surgery"],"Infortunio in allenamento":["Blessure à l'entraînement","Trainingsverletzung","Injured in practice"],"Infortunio muscolare all'inguine":["Blessure musculaire à l'aine","Muskelverletzung in der Leiste","Groin muscle injury"],"Infortunio non specificato":["Blessure non précisée","Nicht näher bezeichnete Verletzung","Undisclosed injury"],"Infortunio rimediato nei playoff #; non ha ancora giocato in questa stagione.":["Blessure subie lors des playoffs # ; il n'a pas encore joué cette saison.","In den Playoffs # verletzt; hat in dieser Saison noch nicht gespielt.","Injured in the # playoffs; hasn't played yet this season."],"Malattia":["Maladie","Krankheit","Illness"],"Manca # giornata: salta Friborgo–Lakers del #.#":["Encore # match : il manque Fribourg–Lakers du #.#","Noch # Spiel: verpasst Freiburg–Lakers vom #.#","# game left: misses Fribourg–Lakers on #.#"],"Non a referto, motivo non comunicato":["Pas sur la feuille de match, motif non communiqué","Nicht im Aufgebot, Grund nicht bekannt gegeben","Not in the lineup, reason not given"],"Non comunicato":["Non communiqué","Nicht kommuniziert","Not disclosed"],"Non comunicato (disco sul polso il #.#)":["Non communiqué (puck sur le poignet le #.#)","Nicht kommuniziert (Puck aufs Handgelenk am #.#)","Not disclosed (puck to the wrist on #.#)"],"Non gioca una partita dalla stagione #/#.":["Il n'a plus joué depuis la saison #/#.","Hat seit der Saison #/# kein Spiel mehr bestritten.","Hasn't played a game since the #/# season."],"Non ha ancora esordito in questa stagione.":["Il n'a pas encore fait ses débuts cette saison.","Hat in dieser Saison noch nicht debütiert.","Hasn't made his season debut yet."],"Non ha ancora giocato in questa stagione.":["Il n'a pas encore joué cette saison.","Hat in dieser Saison noch nicht gespielt.","Hasn't played yet this season."],"Non ha ancora giocato in questa stagione; la finestra di rientro indicata cade a novembre.":["Il n'a pas encore joué cette saison ; la fenêtre de retour indiquée tombe en novembre.","Hat in dieser Saison noch nicht gespielt; das genannte Rückkehrfenster fällt in den November.","Hasn't played yet this season; the stated return window falls in November."],"Non più in rosa: contratto a termine non rinnovato":["Plus dans l'effectif : contrat à durée déterminée non renouvelé","Nicht mehr im Kader: befristeter Vertrag nicht verlängert","No longer on the roster: short-term contract not renewed"],"Non più in rosa: trasferito allo Sparta Praga (#.#)":["Plus dans l'effectif : transféré au Sparta Prague (#.#)","Nicht mehr im Kader: zu Sparta Prag gewechselt (#.#)","No longer on the roster: moved to Sparta Prague (#.#)"],"Non prima di metà dicembre #":["Pas avant mi-décembre #","Nicht vor Mitte Dezember #","Not before mid-December #"],"Nuovo infortunio subito dopo aver recuperato da quello al piede.":["Nouvelle blessure juste après s'être remis de celle au pied.","Neue Verletzung kurz nach der Genesung von der Fussverletzung.","New injury right after recovering from the foot injury."],"Operato lunedì #.#. Il capitano si era fatto male nel terzo tempo contro il Lugano dopo una carica.":["Opéré lundi #.#. Le capitaine s'était blessé au troisième tiers contre Lugano après une charge.","Am Montag, #.#, operiert. Der Captain hatte sich im dritten Drittel gegen Lugano nach einem Check verletzt.","Had surgery on Monday #.#. The captain was hurt in the third period against Lugano after a hit."],"Operazione al ginocchio (infortunio nei playout #)":["Opération au genou (blessure lors des playouts #)","Knieoperation (Verletzung in den Playouts #)","Knee surgery (injured in the # playouts)"],"Operazione alla mano (#.#)":["Opération à la main (#.#)","Handoperation (#.#)","Hand surgery (#.#)"],"Parte inferiore del corpo":["Bas du corps","Unterkörper","Lower body"],"Parte inferiore del corpo (#.#)":["Bas du corps (#.#)","Unterkörper (#.#)","Lower body (#.#)"],"Parte inferiore del corpo (ricaduta il #.# al rientro in CHL)":["Bas du corps (rechute le #.# au retour en CHL)","Unterkörper (Rückfall am #.# beim Comeback in der CHL)","Lower body (setback on #.# on his CHL return)"],"Parte superiore del corpo":["Haut du corps","Oberkörper","Upper body"],"Parte superiore del corpo (#.#)":["Haut du corps (#.#)","Oberkörper (#.#)","Upper body (#.#)"],"Parte superiore del corpo (carica subita l'#.# contro il Lugano)":["Haut du corps (charge subie le #.# contre Lugano)","Oberkörper (Check am #.# gegen Lugano)","Upper body (hit on #.# against Lugano)"],"Postumi di una grave commozione cerebrale":["Séquelles d'une grave commotion cérébrale","Folgen einer schweren Gehirnerschütterung","After-effects of a severe concussion"],"Potrebbe saltare tutta la stagione":["Pourrait manquer toute la saison","Könnte die ganze Saison verpassen","Could miss the whole season"],"Problemi muscolari":["Problèmes musculaires","Muskelprobleme","Muscle problems"],"Pugno a G. Haas (Bienne) il #.#; # giornate portate a # dopo il ricorso del Bienne":["Coup de poing à G. Haas (Bienne) le #.# ; # matchs portés à # après le recours de Bienne","Faustschlag gegen G. Haas (Biel) am #.#; # Spiele nach dem Rekurs von Biel auf # erhöht","Punch on G. Haas (Biel) on #.#; # games raised to # after Biel's appeal"],"Ricaduta al rientro in CHL dopo circa un mese di stop. Secondo il team manager Jan Alston non dovrebbe essere un'assenza lunga.":["Rechute lors du retour en CHL après environ un mois d'arrêt. Selon le team manager Jan Alston, l'absence ne devrait pas être longue.","Rückfall beim Comeback in der CHL nach rund einem Monat Pause. Laut Teammanager Jan Alston sollte es keine lange Absenz werden.","Setback on his CHL return after about a month out. Team manager Jan Alston says it shouldn't be a long absence."],"Rientro a fine gennaio #":["Retour fin janvier #","Rückkehr Ende Januar #","Back at the end of January #"],"Rientro ancora da definire":["Retour encore à définir","Rückkehr noch offen","Return still to be decided"],"Rientro incerto":["Retour incertain","Rückkehr ungewiss","Return uncertain"],"Rientro incerto (era previsto venerdì #.#)":["Retour incertain (il était prévu vendredi #.#)","Rückkehr ungewiss (war für Freitag, #.#, geplant)","Return uncertain (was planned for Friday #.#)"],"Rientro non comunicato":["Retour non communiqué","Rückkehr nicht kommuniziert","Return not given"],"Rientro previsto il #.# contro il Bienne":["Retour prévu le #.# contre Bienne","Rückkehr am #.# gegen Biel geplant","Expected back on #.# against Biel"],"Rientro previsto nella settimana del #.#":["Retour prévu dans la semaine du #.#","Rückkehr in der Woche vom #.# erwartet","Expected back in the week of #.#"],"Rivalutazione a inizio gennaio #":["Réévaluation début janvier #","Neubeurteilung Anfang Januar #","Reassessment in early January #"],"Rottura del crociato e lesione al menisco":["Rupture du ligament croisé et lésion du ménisque","Kreuzbandriss und Meniskusverletzung","Torn ACL and meniscus injury"],"Rottura del crociato e lesione al menisco: stagione finita":["Rupture du ligament croisé et lésion du ménisque : saison terminée","Kreuzbandriss und Meniskusverletzung: Saison vorbei","Torn ACL and meniscus injury: season over"],"Rottura del legamento crociato":["Rupture du ligament croisé","Kreuzbandriss","Torn ACL"],"Rottura del legamento crociato (operato)":["Rupture du ligament croisé (opéré)","Kreuzbandriss (operiert)","Torn ACL (surgery)"],"Rottura del tendine d'Achille":["Rupture du tendon d'Achille","Achillessehnenriss","Ruptured Achilles tendon"],"Salterà la partita di CHL di mercoledì #.#. Si allena con la maglia senza contatti.":["Il manquera le match de CHL de mercredi #.#. Il s'entraîne avec le maillot sans contact.","Verpasst das CHL-Spiel vom Mittwoch, #.#. Trainiert im Non-Contact-Trikot.","Will miss Wednesday's CHL game on #.#. Practising in a no-contact jersey."],"Scontata il #.# a Rapperswil":["Purgée le #.# à Rapperswil","Am #.# in Rapperswil abgesessen","Served on #.# in Rapperswil"],"Scontata: disponibile da Kloten–Davos del #.#":["Purgée : disponible dès Kloten–Davos du #.#","Abgesessen: verfügbar ab Kloten–Davos vom #.#","Served: available from Kloten–Davos on #.#"],"Scontata: disponibile da Zugo–Ajoie del #.#":["Purgée : disponible dès Zoug–Ajoie du #.#","Abgesessen: verfügbar ab Zug–Ajoie vom #.#","Served: available from Zug–Ajoie on #.#"],"Scontro fortuito con un compagno contro il Lugano; uscito sorretto dal ghiaccio.":["Collision fortuite avec un coéquipier contre Lugano ; il a quitté la glace soutenu.","Unglücklicher Zusammenprall mit einem Teamkollegen gegen Lugano; wurde vom Eis gestützt.","Accidental collision with a teammate against Lugano; helped off the ice."],"Secondo il club il recupero procede bene.":["Selon le club, la récupération se passe bien.","Laut Club verläuft die Genesung gut.","The club says his recovery is going well."],"Segnalato da tio.ch il #.# e mai a referto da allora; non figura nel Medical Report di sport.ch.":["Signalé par tio.ch le #.# et jamais sur la feuille depuis ; il ne figure pas dans le Medical Report de sport.ch.","Am #.# von tio.ch gemeldet und seither nie im Aufgebot; steht nicht im Medical Report von sport.ch.","Reported by tio.ch on #.# and not in a lineup since; not listed in sport.ch's Medical Report."],"Si allena con la squadra con la maglia senza contatti.":["Il s'entraîne avec l'équipe avec le maillot sans contact.","Trainiert mit dem Team im Non-Contact-Trikot.","Practising with the team in a no-contact jersey."],"Sovrannumero: # stranieri a referto, nessun infortunio o squalifica comunicati":["Surnombre : # étrangers sur la feuille, aucune blessure ni suspension communiquée","Überzählig: # Ausländer im Aufgebot, keine Verletzung oder Sperre gemeldet","Extra import: # imports in the lineup, no injury or suspension reported"],"Spalla (operato)":["Épaule (opéré)","Schulter (operiert)","Shoulder (surgery)"],"Spalla (operazione necessaria)":["Épaule (opération nécessaire)","Schulter (Operation nötig)","Shoulder (needs surgery)"],"Squalifica di # giornata (carica alla testa su A. Ruotsalainen)":["Suspension de # match (charge à la tête sur A. Ruotsalainen)","Sperre für # Spiel (Check gegen den Kopf von A. Ruotsalainen)","# game suspension (head hit on A. Ruotsalainen)"],"Squalifica di # giornate (carica da dietro su N. Dünner, #.#), scontata il #.#":["Suspension de # matchs (charge par derrière sur N. Dünner, #.#), purgée le #.#","Sperre für # Spiele (Check von hinten gegen N. Dünner, #.#), am #.# abgesessen","# game suspension (hit from behind on N. Dünner, #.#), served on #.#"],"Squalifica di # giornate per un pugno a G. Haas (#.#), scontata il #.#":["Suspension de # matchs pour un coup de poing à G. Haas (#.#), purgée le #.#","Sperre für # Spiele wegen eines Faustschlags gegen G. Haas (#.#), am #.# abgesessen","# game suspension for punching G. Haas (#.#), served on #.#"],"Squalifica scontata: di nuovo convocabile dal #.#":["Suspension purgée : de nouveau sélectionnable dès le #.#","Sperre abgesessen: ab #.# wieder spielberechtigt","Suspension served: eligible again from #.#"],"Stagione #/# finita":["Saison #/# terminée","Saison #/# vorbei","#/# season over"],"Stagione finita":["Saison terminée","Saison vorbei","Season over"],"Stagione probabilmente finita":["Saison probablement terminée","Saison wohl vorbei","Season probably over"],"Tempi di recupero non definiti":["Délai de récupération non défini","Genesungsdauer offen","Recovery time not set"],"Topscorer del Davos. Le fonti divergono sulla zona: parte superiore del corpo per SHN/Südostschweiz, inferiore per sport.ch.":["Meilleur marqueur de Davos. Les sources divergent sur la zone : haut du corps selon SHN/Südostschweiz, bas du corps selon sport.ch.","Topskorer des HCD. Die Quellen sind sich bei der Zone uneinig: Oberkörper laut SHN/Südostschweiz, Unterkörper laut sport.ch.","Davos's top scorer. Sources disagree on the area: upper body per SHN/Südostschweiz, lower body per sport.ch."],"Trasferito allo Sparta Praga il #.#":["Transféré au Sparta Prague le #.#","Am #.# zu Sparta Prag gewechselt","Moved to Sparta Prague on #.#"],"Uscito dopo una carica contro i SCL Tigers.":["Sorti après une charge contre les SCL Tigers.","Nach einem Check gegen die SCL Tigers ausgeschieden.","Left the game after a hit against the SCL Tigers."],"Uscito dopo uno scontro con V. Rohrer contro lo Zugo.":["Sorti après une collision avec V. Rohrer contre Zoug.","Nach einem Zusammenstoss mit V. Rohrer gegen Zug ausgeschieden.","Left the game after a collision with V. Rohrer against Zug."],"Uscito in barella contro il Berna; era appena rientrato da una commozione cerebrale. Si allena con la maglia senza contatti, rientro ancora da definire.":["Sorti sur civière contre Berne ; il venait de revenir d'une commotion cérébrale. Il s'entraîne avec le maillot sans contact, retour encore à définir.","Gegen Bern auf der Trage vom Eis; er war gerade von einer Gehirnerschütterung zurückgekehrt. Trainiert im Non-Contact-Trikot, Rückkehr noch offen.","Stretchered off against Bern; he had just returned from a concussion. Practising in a no-contact jersey, return still to be decided."],"Valutazione di settimana in settimana":["Évaluation de semaine en semaine","Beurteilung von Woche zu Woche","Week-to-week"],"Valutazione giorno per giorno":["Évaluation au jour le jour","Beurteilung von Tag zu Tag","Day-to-day"],"Infortunato alla prima giornata a Lugano; non ancora a referto dopo la pausa. Non figura più nel Medical Report di sport.ch del #.#: rientro possibile a breve, da confermare a referto.":["Blessé lors de la première journée à Lugano ; pas encore sur la feuille après la pause. Il ne figure plus dans le Medical Report de sport.ch du #.# : retour possible bientôt, à confirmer sur la feuille de match.","Am ersten Spieltag in Lugano verletzt; nach der Pause noch nicht im Aufgebot. Steht nicht mehr im Medical Report von sport.ch vom #.#: Rückkehr bald möglich, muss sich im Aufgebot bestätigen.","Injured on opening day in Lugano; not yet in the lineup after the break. No longer in sport.ch's Medical Report of #.#: could be back soon, to be confirmed by the lineup."],"Rientrato dalla squalifica il #.# a Zugo":["De retour de suspension le #.# à Zoug","Am #.# in Zug nach der Sperre zurück","Back from suspension on #.# at Zug"],"Non rientrerà nel #":["Ne reviendra pas en #","Kein Comeback mehr #","Won't return in #"],"Secondo La Liberté non tornerà in pista prima del #.":["Selon La Liberté, il ne rejouera pas avant #.","Laut La Liberté spielt er nicht vor # wieder.","According to La Liberté, he won't play again before #."],"Rientro previsto il #.#":["Retour prévu le #.#","Rückkehr am #.# erwartet","Expected back on #.#"],"Infortunio rimediato nei playoff #; non ha ancora giocato in questa stagione. Presto di nuovo pienamente in allenamento.":["Blessé lors des playoffs #; n'a pas encore joué cette saison. Bientôt de retour à l'entraînement complet.","In den Playoffs # verletzt; hat diese Saison noch nicht gespielt. Soll bald wieder voll trainieren.","Injured in the # playoffs; hasn't played yet this season. Should soon be back in full practice."],"Nessuna tempistica per il rientro":["Aucun délai de retour","Noch kein Zeitplan für die Rückkehr","No timeline for a return"],"Rientro non prima di gennaio #":["Retour pas avant janvier #","Rückkehr nicht vor Januar #","Not back before January #"],"Si è fatto male al ginocchio in allenamento; secondo La Liberté il Friborgo lo riavrà solo a gennaio.":["Blessé au genou à l'entraînement ; selon La Liberté, Fribourg ne le récupérera qu'en janvier.","Am Knie im Training verletzt; laut La Liberté hat Freiburg ihn erst im Januar zurück.","Hurt his knee in practice; according to La Liberté, Fribourg won't have him back until January."],"Possibile rientro venerdì #.#":["Retour possible vendredi #.#","Mögliche Rückkehr am Freitag, #.#","Possible return on Friday #.#"],"Fuori nel weekend, possibile rientro martedì #.#":["Absent ce week-end, retour possible mardi #.#","Fehlt am Wochenende, mögliche Rückkehr am Dienstag, #.#","Out this weekend, possible return on Tuesday #.#"],"Rientro previsto a inizio dicembre":["Retour prévu début décembre","Rückkehr Anfang Dezember erwartet","Expected back in early December"],"Arrivato dall'Ambrì il #.#, contratto fino a fine stagione":["Arrivé d'Ambrì le #.#, contrat jusqu'à la fin de la saison","Am #.# von Ambrì gekommen, Vertrag bis Saisonende","Joined from Ambrì on #.#, contract until the end of the season"],"Assente per infortunio contro il Berna il #.#.":["Absent sur blessure contre Berne le #.#.","Fehlte am #.# gegen Bern verletzt.","Missed the game against Bern on #.# through injury."],"Assente per malattia contro il Ginevra il #.#.":["Absent pour maladie contre Genève le #.#.","Fehlte am #.# gegen Genf krank.","Missed the game against Geneva on #.# through illness."],"Carica a M. Künzle (Zugo) il #.#":["Charge sur M. Künzle (Zoug) le #.#","Check gegen M. Künzle (Zug) am #.#","Hit on M. Künzle (Zug) on #.#"],"Da valutare dopo la risonanza magnetica":["À évaluer après l'IRM","Offen nach der MRI-Untersuchung","To be assessed after the MRI"],"Ginocchio destro (#.#)":["Genou droit (#.#)","Rechtes Knie (#.#)","Right knee (#.#)"],"Infortunato (poi rientrato il #.#)":["Blessé (de retour le #.#)","Verletzt (am #.# zurückgekehrt)","Injured (back on #.#)"],"Infortunato nel primo tempo della partita con lo ZSC del #.#; venerdì #.# si è sottoposto a una risonanza magnetica.":["Blessé au premier tiers du match contre le ZSC du #.# ; il a passé une IRM vendredi #.#.","Im ersten Drittel des Spiels gegen den ZSC vom #.# verletzt; am Freitag, #.#, wurde eine MRI gemacht.","Injured in the first period of the game against ZSC on #.#; he had an MRI on Friday #.#."],"Malattia (#.#)":["Maladie (#.#)","Krankheit (#.#)","Illness (#.#)"],"Manca # giornata: salta Ajoie–Friborgo del #.#":["Encore # match : il manque Ajoie–Fribourg du #.#","Noch # Spiel: verpasst Ajoie–Freiburg vom #.#","# game left: misses Ajoie–Fribourg on #.#"],"Non comunicato (#.#)":["Non communiqué (#.#)","Nicht kommuniziert (#.#)","Not disclosed (#.#)"],"Non più in rosa: passato al Friborgo (#.#)":["Plus dans l'effectif : parti à Fribourg (#.#)","Nicht mehr im Kader: zu Freiburg gewechselt (#.#)","No longer on the roster: moved to Fribourg (#.#)"],"Non prima di metà dicembre":["Pas avant la mi-décembre","Nicht vor Mitte Dezember","Not before mid-December"],"Rientro previsto a fine novembre":["Retour prévu fin novembre","Rückkehr Ende November erwartet","Expected back at the end of November"],"Scontata: disponibile da Lakers–Langnau del #.#":["Purgée : disponible dès Lakers–Langnau du #.#","Abgesessen: verfügbar ab Lakers–Langnau vom #.#","Served: available from Lakers–Langnau on #.#"],"Sospensione provvisoria di # giornata (gomitata a G. Meier)":["Suspension provisoire de # match (coup de coude sur G. Meier)","Provisorische Sperre für # Spiel (Ellbogencheck gegen G. Meier)","Provisional # game suspension (elbow on G. Meier)"],"Squalifica (# giornate) per una carica alla testa su V. Pilet":["Suspension (# matchs) pour une charge à la tête sur V. Pilet","Sperre (# Spiele) wegen eines Checks gegen den Kopf von V. Pilet","Suspension (# games) for a head hit on V. Pilet"],"Squalifica di # giornata per una ginocchiata ad A. Petersson":["Suspension de # match pour un coup de genou sur A. Petersson","Sperre für # Spiel wegen eines Kniechecks gegen A. Petersson","# game suspension for kneeing A. Petersson"],"Squalifica di # giornate (carica a M. Künzle, #.#)":["Suspension de # matchs (charge sur M. Künzle, #.#)","Sperre für # Spiele (Check gegen M. Künzle, #.#)","# game suspension (hit on M. Künzle, #.#)"],"È tornato ad allenarsi sul ghiaccio, ma la data del rientro in partita non è definita.":["Il a repris l'entraînement sur la glace, mais la date de son retour en match n'est pas fixée.","Er trainiert wieder auf dem Eis, ein Datum für die Rückkehr ins Spiel steht aber nicht fest.","He is back skating, but no date has been set for his return to games."]}; // I18N_DATA: Italian data text (digits as #) -> [fr, de, en]
 const LANGS = [['it','Italiano'],['fr','Français'],['de','Deutsch'],['en','English']];
 const IX = {fr:0, de:1, en:2};
