@@ -37,7 +37,7 @@ s = re.sub(r'<p><b>Foto e statistiche\.</b>.*?</p>',
            '<p><b>Statistiche.</b> Statistiche stagionali da <a href="https://www.nationalleague.ch" target="_blank" rel="noopener">nationalleague.ch</a>. '
            'Questo sito non è affiliato alla National League né ai club.</p>', s, count=1, flags=re.S)
 s = re.sub(r'<p><b>Le mie rose\.</b>.*?</p>',
-           '<p><b>Le mie rose.</b> '+"Le tue rose sono salvate in questo browser. Se accedi con la tua email, vengono salvate anche nel tuo account, così le ritrovi sugli altri dispositivi. L'accesso è facoltativo e l'email serve solo a questo: non viene usata per altro né condivisa. I dati sono conservati presso Supabase, su server in Europa, e puoi eliminare account e dati in qualsiasi momento con «Elimina account» nella pagina delle rose."+'</p>', s, count=1, flags=re.S)
+           '<p><b>Le mie rose.</b> '+"Le tue rose sono salvate in questo browser. Se accedi con la tua email, vengono salvate anche nel tuo account, così le ritrovi sugli altri dispositivi. L'accesso è facoltativo e l'email serve solo a questo: non viene usata per altro né condivisa. I dati sono conservati presso Supabase, su server in Europa, e puoi eliminare account e dati in qualsiasi momento con «Elimina account» nella pagina delle rose."+' <a href="privacy.html">Privacy</a></p>', s, count=1, flags=re.S)
 
 # 3. Initials only: no need to keep the image markup reachable.
 updated = re.search(r'"updated":"(\d{4}-\d{2}-\d{2})"', s)
