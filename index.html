@@ -1662,7 +1662,7 @@ async function sbDeleteAll(){
   sbConfirmDel = false; store.set('oti-sb-joined', ''); sbSess = null; sbUser = null; sbPulled = false; sbState = 'out'; sbSave();
   rmsg('Account eliminato. Le rose restano su questo dispositivo.'); renderAcct();
 }
-const GOOGLE_ON = false;
+const GOOGLE_ON = true;
 function sbGoogle(){ location.href = SB.url + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(sbRedirect()); }
 const SB_NOTE = () => ({sent: 'Ti abbiamo mandato un link: aprilo su questo dispositivo per accedere.', limit: 'Troppe richieste in poco tempo: riprova tra qualche minuto.', senderr: 'Invio non riuscito: controlla l\'indirizzo e riprova.', error: 'Il link non è valido o è scaduto: chiedine uno nuovo.'}[sbState] || '');
 function loginForm(where, cancel){
