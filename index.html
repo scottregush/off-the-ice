@@ -946,7 +946,7 @@ function injRow(x, withTeam){
     : `<b>–</b><span class="sub">data non nota</span>`;
   const [mn, ml] = missText(x);
   return `<li class="inj">
-    <button class="pbtn who" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(x.n)}">
+    <button class="pbtn who" data-player="${esc(k)}">
       ${avatar(k, 'md', x.cat)}
       <span class="who-t"><span class="nm">${esc(x.n)}</span>
         <span class="meta">${withTeam ? tcode(t) : ''}<span class="tag">${POS[x.pos]}</span>${x.nat ? `<span class="tag nat" title="Straniero">${x.nat}</span>` : ''}</span>
@@ -981,7 +981,7 @@ function renderOverview(){
 
   const heavy = [...D.inj].sort((a,b) => pts(key(b.t,b.n)) - pts(key(a.t,a.n))).slice(0, 6);
   $('#heavy').innerHTML = heavy.map(x => { const k = key(x.t, x.n), p = P[k];
-    return `<button class="hv" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(x.n)}">
+    return `<button class="hv" data-player="${esc(k)}">
       ${avatar(k, 'lg', x.cat)}
       <span class="hv-n">${esc(x.n)}</span>${tcode(T[x.t])}
       <span class="hv-p">${p.pts}<small>punti in ${p.gp} PG</small></span>
@@ -993,14 +993,14 @@ function renderOverview(){
   const order = Object.keys(CAT);
   $('#bars').innerHTML = rows.map(({t, list}) => {
     const segs = order.map(c => { const n = list.filter(x => x.cat === c).length; return n ? `<i class="seg-${c}" style="width:${(n / max * 100).toFixed(2)}%" title="${CAT[c].l}: ${n}"></i>` : ''; }).join('');
-    return `<button class="bar-row" data-team="${t.id}" aria-label="${esc(t.name)}: ${list.length} indisponibili. Apri la scheda.">
+    return `<button class="bar-row" data-team="${t.id}" aria-label="${esc(t.name)}: ${list.length} indisponibili (${order.map(c => [CAT[c].l, list.filter(x => x.cat === c).length]).filter(z => z[1]).map(z => z[0] + ' ' + z[1]).join(', ')}). Apri la scheda.">
       <span class="nm">${tcode(t)}<span>${esc(t.it)}</span></span>
       <span class="bar-track">${segs}</span><b>${list.length}</b></button>`;
   }).join('');
   $('#bars-legend').innerHTML = order.map(c => `<span><i class="seg-${c}"></i>${CAT[c].l}</span>`).join('');
 
   const feedItem = (x, date, txt) => { const k = key(x.t, x.n);
-    return `<li><button class="pbtn" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(x.n)}">${avatar(k, 'sm', x.cat)}
+    return `<li><button class="pbtn" data-player="${esc(k)}">${avatar(k, 'sm', x.cat)}
       <span><span class="who"><span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}</span><span class="txt">${txt}</span></span>
       <span class="d">${date}</span></button></li>`; };
   const news = D.inj.filter(x => x.since && x.since >= '2026-11-09').sort((a,b) => b.since.localeCompare(a.since) || a.n.localeCompare(b.n));
@@ -1059,7 +1059,7 @@ function sheetHTML(t){
     const k = key(t.id, p.n);
     const sub = p.pos === 'P' ? `${p.gp}/5 da titolare` : `${p.gp}/5 presenze${p.gp ? ` · ${p.g}+${p.a} punti` : ''}`;
     return `<div class="sheet-row">
-      <button class="pbtn pl" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(p.n)}">${avatar(k, 'sm')}
+      <button class="pbtn pl" data-player="${esc(k)}">${avatar(k, 'sm')}
         <span class="pl-t"><span class="nm">${esc(p.n)}<span class="tag nat">${p.nat}</span><span class="tag" title="${POS[p.pos]}">${p.pos}</span></span>
         <span class="sub">${sub}</span>${p.note ? `<span class="gone">${esc(p.note)}</span>` : ''}</span></button>
       ${p.c.map((c, gi) => `<button class="cell st-${c.s}" data-t="${t.id}" data-p="${pi}" data-g="${gi}" aria-pressed="false" aria-label="${esc(p.n)}, ${dm(t.last5[gi].d)}: ${ST[c.s].l}">
@@ -1111,12 +1111,12 @@ function renderTeam(){
         <p class="small muted" style="margin-top:10px">Legenda completa nella sezione <a href="#stranieri">Stranieri</a>.</p></div>
       <div class="stack">
         <div class="card"><h2 class="h3">Squalifiche</h2>${sus.length ? `<ul class="mini">${sus.map(s => { const k = key(s.t, s.n); return `<li>
-            <button class="pbtn" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(s.n)}">${avatar(k, 'md')}
+            <button class="pbtn" data-player="${esc(k)}">${avatar(k, 'md')}
             <span><span class="hd"><span class="nm">${esc(s.n)}</span>${s.nat ? `<span class="tag nat">${s.nat}</span>` : ''}<span class="pill ${s.served >= s.games ? 'cat-ok' : 'cat-sus'}">${s.served}/${s.games} scontate</span></span>
             <span class="small muted">${esc(s.why)}. ${esc(s.state)}.</span></span></button></li>`; }).join('')}</ul>`
           : `<p class="muted">Nessuna squalifica recente.</p>`}</div>
         <div class="card"><h2 class="h3">Rientrati di recente</h2>${t.back.length
-          ? `<div class="backs">${t.back.map(b => { const k = key(t.id, b.n); return `<button class="pbtn" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(b.n)}">${avatar(k, 'sm')}<span class="nm">${esc(b.n)} · ${b.d}</span></button>`; }).join('')}</div><p class="small muted" style="margin-top:10px">Data della prima partita di nuovo a referto.</p>`
+          ? `<div class="backs">${t.back.map(b => { const k = key(t.id, b.n); return `<button class="pbtn" data-player="${esc(k)}">${avatar(k, 'sm')}<span class="nm">${esc(b.n)} · ${b.d}</span></button>`; }).join('')}</div><p class="small muted" style="margin-top:10px">Data della prima partita di nuovo a referto.</p>`
           : `<p class="muted">Nessun rientro dopo la pausa.</p>`}</div>
       </div>
     </div>`;
@@ -1138,7 +1138,7 @@ function renderImports(){
   }));
   scr.sort((a,b) => b.ds.length - a.ds.length || b.ds[b.ds.length-1].d.localeCompare(a.ds[a.ds.length-1].d));
   $('#scr-rank').innerHTML = scr.map(({t,p,ds}) => { const k = key(t.id, p.n); return `<li>
-      <button class="pbtn" data-player="${esc(k)}" aria-label="Apri la scheda di ${esc(p.n)}">${avatar(k, 'sm')}
+      <button class="pbtn" data-player="${esc(k)}">${avatar(k, 'sm')}
       <span class="who2"><span class="l1"><span class="nm">${esc(p.n)}</span><span class="tag nat">${p.nat}</span>${tcode(t)}</span>
       <span class="dts">${ds.map(g => `${dm(g.d)} ${g.ha === 'A' ? '@' : 'v.'} ${g.opp}`).join(' · ')}</span></span></button><b>${ds.length}×</b></li>`; }).join('');
   const av = D.teams.map(t => ({t, ...availability(t)})).sort((a,b) => b.avail - a.avail || a.t.it.localeCompare(b.t.it));
@@ -1303,7 +1303,7 @@ function rosterRow(pl, st){
   const t = T[pl.t], nx = t.next, sl = statLine(pl.k);
   const strip = (pl.l5 || []).map((c, i) => `<span class="mc st-${c.s}" title="${esc(gameLabel(t.last5[i]) + ': ' + cellText(pl, c))}">${ST[c.s].g}</span>`).join('');
   return `<li class="rr${pl.id === fresh ? ' fresh' : ''}">
-    <button class="pbtn who" data-player="${esc(pl.k)}" aria-label="Apri la scheda di ${esc(pl.n)}">${avatar(pl.k, 'md', st.dot)}
+    <button class="pbtn who" data-player="${esc(pl.k)}">${avatar(pl.k, 'md', st.dot)}
       <span class="who-t"><span class="nm">${esc(pl.n)}</span><span class="meta">${tcode(t)}<span class="tag">${POS[pl.pos]}</span>${pl.nat ? `<span class="tag nat">${pl.nat}</span>` : ''}</span>${sl ? `<span class="stat">${sl}</span>` : ''}</span></button>
     <div class="rr-st"><span class="pill ${st.cls}">${st.label}</span><span class="ret">${esc(st.text)}</span></div>
     <div class="rr-l5"><span class="lbl">Ultime 5</span><span class="mcs">${strip}</span></div>
@@ -3514,6 +3514,7 @@ const RULES = [
   [/^(.+), (\d+\.\d+): (.+)$/, m => m[1] + ', ' + m[2] + ': ' + tr(m[3])],
   [/^(.+) \((\d+)\)$/, m => tr(m[1]) + ' (' + m[2] + ')'],
   [/^(.+), (\d+) indisponibili$/, m => m[1] + ', ' + m[2] + ' ' + P(['absents', 'Ausfälle', 'unavailable'])],
+  [/^(.+): (\d+) indisponibili \((.+)\)\. Apri la scheda\.$/, m => m[1] + ': ' + m[2] + ' ' + P(['absents', 'Ausfälle', 'unavailable']) + ' (' + m[3].split(', ').map(z => { const q = z.match(/^(.+) (\d+)$/); return q ? tr(q[1]) + ' ' + q[2] : z; }).join(', ') + '). ' + P(['Ouvrir la fiche.', 'Profil öffnen.', 'Open the card.'])],
   [/^(.+): (\d+) indisponibili\. Apri la scheda\.$/, m => m[1] + ': ' + m[2] + ' ' + P(['absents. Ouvrir la fiche.', 'Ausfälle. Profil öffnen.', 'unavailable. Open the card.'])],
   [/^([^:]+): (.+)$/, m => { const x = tr(m[2]); return x !== m[2] ? m[1] + ': ' + x : null; }],
   [/^(.*?[a-z0-9)]\.) ([A-Z].*)$/, m => {
@@ -3608,6 +3609,10 @@ document.addEventListener('click', e => { if (!menu.hidden && !box.contains(e.ta
 /* Layout fixes for the public site, added by build_site.py after the page's own styles
    (so they win on equal specificity). Keep them here so the twice-daily rebuild keeps them. */
 
+/* Light mode: injury-category colours (team bars, legend, status dots) reach 3:1 against the white cards
+   (WCAG 1.4.11). Dark mode keeps its own values, which already pass. */
+:root{--seg-long:#D45A12;--seg-weeks:#A87700;--seg-dtd:#138F85;--seg-unk:#768698}
+
 /* Headline stays clear of the rink lines and faceoff circle on wide screens. */
 .band h1{max-width:840px}
 /* Tablets: the rink fills most of the band, so fade it behind the text as the phone layout already does. */
@@ -3648,5 +3653,37 @@ document.addEventListener('click', e => { if (!menu.hidden && !box.contains(e.ta
   .heavy > *{flex:0 0 152px;scroll-snap-align:start}
 }
 </style>
+<script id="site-fixes-js">
+/* Accessibility fixes for the public site, added by build_site.py after the page's own script. */
+(() => {
+  /* Desktop side panel (player card, non-modal): Tab past its last control, or Shift+Tab before its first,
+     goes back to the element that opened it, so keyboard users continue where they were in the page. */
+  let lastOutside = null;
+  document.addEventListener('focusin', e => { if (!e.target.closest('dialog')) lastOutside = e.target; });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const d = document.querySelector('dialog.side[open]');
+    if (!d || !d.contains(document.activeElement)) return;
+    const f = [...d.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])')]
+      .filter(x => x.getClientRects().length);
+    if (!f.length) return;
+    const edge = e.shiftKey ? f[0] : f[f.length - 1];
+    if (document.activeElement !== edge) return;
+    const back = (lastOutside && lastOutside.isConnected) ? lastOutside : document.querySelector('main .is-open');
+    if (!back) return;
+    e.preventDefault();
+    back.focus();
+  });
+
+  /* Language switch rewrites the text of every live region at once; mute them for that moment
+     so screen readers don't read out a dozen identical hints. */
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[data-lang-set]')) return;
+    const live = [...document.querySelectorAll('[aria-live="polite"]')];
+    live.forEach(x => x.setAttribute('aria-live', 'off'));
+    setTimeout(() => live.forEach(x => x.setAttribute('aria-live', 'polite')), 500);
+  }, true);
+})();
+</script>
 </body>
 </html>

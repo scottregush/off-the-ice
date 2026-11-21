@@ -1,6 +1,10 @@
 /* Layout fixes for the public site, added by build_site.py after the page's own styles
    (so they win on equal specificity). Keep them here so the twice-daily rebuild keeps them. */
 
+/* Light mode: injury-category colours (team bars, legend, status dots) reach 3:1 against the white cards
+   (WCAG 1.4.11). Dark mode keeps its own values, which already pass. */
+:root{--seg-long:#D45A12;--seg-weeks:#A87700;--seg-dtd:#138F85;--seg-unk:#768698}
+
 /* Headline stays clear of the rink lines and faceoff circle on wide screens. */
 .band h1{max-width:840px}
 /* Tablets: the rink fills most of the band, so fade it behind the text as the phone layout already does. */
