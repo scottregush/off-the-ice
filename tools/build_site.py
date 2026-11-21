@@ -39,29 +39,55 @@ s = re.sub(r'<p><b>Foto e statistiche\.</b>.*?</p>',
 s = re.sub(r'<p><b>Le mie rose\.</b>.*?</p>',
            '<p><b>Le mie rose.</b> '+"Le tue rose sono salvate in questo browser. Se accedi con la tua email, vengono salvate anche nel tuo account, così le ritrovi sugli altri dispositivi. L'accesso è facoltativo e l'email serve solo a questo: non viene usata per altro né condivisa. I dati sono conservati presso Supabase, su server in Europa, e puoi eliminare account e dati in qualsiasi momento con «Elimina account» nella pagina delle rose."+' <a href="privacy.html">Privacy</a></p>', s, count=1, flags=re.S)
 
+# 2b. English by default. Visitors pick another language (IT/FR/DE/EN) from the menu, and the choice is kept
+#     in their browser; the browser's own language no longer decides.
+s = re.sub(r"if \(!start\)\{\n  for \(const n of \(navigator\.languages[^\n]*\n\}\n", '', s, count=1)
+s = s.replace("apply(start || 'it');", "apply(start || 'en');")
+if "apply(start || 'en');" not in s:
+    print('warning: language start code not found; the default language was not set to English')
+# The browser-tab title follows the chosen language (the page's own translation left it in Italian).
+TITLES_JS = ('document.title = ({it:"Off the Ice · Infortunati e indisponibili della National League", '
+             'fr:"Off the Ice · Blessés et absents de la National League", '
+             'de:"Off the Ice · Verletzte und Ausfälle der National League", '
+             'en:"Off the Ice · Who\'s missing in the National League"})[l] || tr(titleIT);')
+s = s.replace('document.title = tr(titleIT);', TITLES_JS)
+if TITLES_JS not in s:
+    print('warning: title code not found; the browser-tab title is not translated')
+
+# 2c. Layout fixes for the open web (tools/site_fixes.css), placed after the page's own styles.
+fixes = Path(__file__).resolve().parent / 'site_fixes.css'
+s = re.sub(r'\s*<style id="site-fixes">.*?</style>', '', s, flags=re.S)
+if fixes.exists():
+    s += '\n<style id="site-fixes">\n' + fixes.read_text(encoding='utf8').strip() + '\n</style>'
+
 # 3. Initials only: no need to keep the image markup reachable.
 updated = re.search(r'"updated":"(\d{4}-\d{2}-\d{2})"', s)
 updated = updated.group(1) if updated else date.today().isoformat()
 
 y_, m_, d_ = updated.split('-')
 updated_it = f'{d_}.{m_}.{y_}'
-title = 'Off the Ice · Infortunati e indisponibili della National League'
-desc = ('Chi manca in National League: infortuni, squalifiche e stranieri in tribuna delle 14 squadre di hockey, '
-        'con rientro previsto, ultime 5 partite e le tue rose per il fantahockey. Aggiornato due volte al giorno.')
+# English by default: search and share previews read these tags without running the page.
+# The page then sets the tab title to the visitor's chosen language (see TITLES_JS above).
+title_en = "Off the Ice · Who's missing in the National League"
+desc = ("Who's missing in the National League: injuries, suspensions and scratched imports for all 14 teams, "
+        'with expected return, last 5 games and your own fantasy hockey rosters. Updated twice a day.')
 
 head = f'''<!doctype html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>{title}</title>
+<title>{title_en}</title>
 <meta name="description" content="{desc}">
 <meta name="robots" content="index,follow">
 <meta name="google-site-verification" content="UMQqYc_pF2QXIGmAaknFINabVE4EtxecVviGykGKkk8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="{title}">
+<meta property="og:title" content="{title_en}">
 <meta property="og:description" content="{desc}">
-<meta property="og:locale" content="it_CH">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="it_CH">
+<meta property="og:locale:alternate" content="fr_CH">
+<meta property="og:locale:alternate" content="de_CH">
 {f'<link rel="canonical" href="{site_url}">' if site_url else ''}
 {f'<meta property="og:url" content="{site_url}">' if site_url else ''}
 <meta name="theme-color" content="#0C1F3A">
@@ -70,10 +96,10 @@ head = f'''<!doctype html>
 {f'<meta property="og:image" content="{site_url}og-image.png?v={updated}">' if site_url else ''}
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Off the Ice: giocatori indisponibili in National League, aggiornato al {updated_it}">
+<meta property="og:image:alt" content="Off the Ice: unavailable players in the National League, updated {updated_it}">
 <meta property="og:site_name" content="Off the Ice">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{title}">
+<meta name="twitter:title" content="{title_en}">
 <meta name="twitter:description" content="{desc}">
 {f'<meta name="twitter:image" content="{site_url}og-image.png?v={updated}">' if site_url else ''}
 <style>:root{{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}}html{{scroll-padding-top:env(safe-area-inset-top,0px)}}body{{margin:0;padding:0}}img{{max-width:100%}}[hidden]:not([hidden=until-found i]){{display:none!important}}</style>

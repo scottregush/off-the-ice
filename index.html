@@ -3,14 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Off the Ice · Infortunati e indisponibili della National League</title>
-<meta name="description" content="Chi manca in National League: infortuni, squalifiche e stranieri in tribuna delle 14 squadre di hockey, con rientro previsto, ultime 5 partite e le tue rose per il fantahockey. Aggiornato due volte al giorno.">
+<title>Off the Ice · Who's missing in the National League</title>
+<meta name="description" content="Who's missing in the National League: injuries, suspensions and scratched imports for all 14 teams, with expected return, last 5 games and your own fantasy hockey rosters. Updated twice a day.">
 <meta name="robots" content="index,follow">
 <meta name="google-site-verification" content="UMQqYc_pF2QXIGmAaknFINabVE4EtxecVviGykGKkk8">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Off the Ice · Infortunati e indisponibili della National League">
-<meta property="og:description" content="Chi manca in National League: infortuni, squalifiche e stranieri in tribuna delle 14 squadre di hockey, con rientro previsto, ultime 5 partite e le tue rose per il fantahockey. Aggiornato due volte al giorno.">
-<meta property="og:locale" content="it_CH">
+<meta property="og:title" content="Off the Ice · Who's missing in the National League">
+<meta property="og:description" content="Who's missing in the National League: injuries, suspensions and scratched imports for all 14 teams, with expected return, last 5 games and your own fantasy hockey rosters. Updated twice a day.">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="it_CH">
+<meta property="og:locale:alternate" content="fr_CH">
+<meta property="og:locale:alternate" content="de_CH">
 <link rel="canonical" href="https://scottregush.github.io/off-the-ice/">
 <meta property="og:url" content="https://scottregush.github.io/off-the-ice/">
 <meta name="theme-color" content="#0C1F3A">
@@ -19,11 +22,11 @@
 <meta property="og:image" content="https://scottregush.github.io/off-the-ice/og-image.png?v=2026-11-21">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Off the Ice: giocatori indisponibili in National League, aggiornato al 21.11.2026">
+<meta property="og:image:alt" content="Off the Ice: unavailable players in the National League, updated 21.11.2026">
 <meta property="og:site_name" content="Off the Ice">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Off the Ice · Infortunati e indisponibili della National League">
-<meta name="twitter:description" content="Chi manca in National League: infortuni, squalifiche e stranieri in tribuna delle 14 squadre di hockey, con rientro previsto, ultime 5 partite e le tue rose per il fantahockey. Aggiornato due volte al giorno.">
+<meta name="twitter:title" content="Off the Ice · Who's missing in the National League">
+<meta name="twitter:description" content="Who's missing in the National League: injuries, suspensions and scratched imports for all 14 teams, with expected return, last 5 games and your own fantasy hockey rosters. Updated twice a day.">
 <meta name="twitter:image" content="https://scottregush.github.io/off-the-ice/og-image.png?v=2026-11-21">
 <style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
 </head>
@@ -3574,7 +3577,7 @@ const box = document.getElementById('lang'), b = document.getElementById('lang-b
 function apply(l){
   lang = l; document.documentElement.lang = l;
   busy = true; walk(document.body); mo.takeRecords(); busy = false;
-  document.title = tr(titleIT);
+  document.title = ({it:"Off the Ice · Infortunati e indisponibili della National League", fr:"Off the Ice · Blessés et absents de la National League", de:"Off the Ice · Verletzte und Ausfälle der National League", en:"Off the Ice · Who's missing in the National League"})[l] || tr(titleIT);
   if (b){
     const name = LANGS.find(x => x[0] === l)[1];
     b.querySelector('.lc').textContent = l.toUpperCase();
@@ -3586,10 +3589,7 @@ function apply(l){
 let saved = null;
 try { saved = localStorage.getItem('oti-lang'); } catch (e){}
 let start = LANGS.some(x => x[0] === saved) ? saved : null;
-if (!start){
-  for (const n of (navigator.languages || [navigator.language || ''])){ const c = String(n).slice(0, 2).toLowerCase(); if (LANGS.some(x => x[0] === c)){ start = c; break; } }
-}
-apply(start || 'it');
+apply(start || 'en');
 mo.observe(document.body, {childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:ATTRS});
 
 if (!b) return;
@@ -3604,5 +3604,49 @@ menu.addEventListener('keydown', e => {
 document.addEventListener('click', e => { if (!menu.hidden && !box.contains(e.target)) open(false); });
 })();
 </script>
+<style id="site-fixes">
+/* Layout fixes for the public site, added by build_site.py after the page's own styles
+   (so they win on equal specificity). Keep them here so the twice-daily rebuild keeps them. */
+
+/* Headline stays clear of the rink lines and faceoff circle on wide screens. */
+.band h1{max-width:840px}
+/* Tablets: the rink fills most of the band, so fade it behind the text as the phone layout already does. */
+@media (max-width:1023px){.rink{opacity:.3}}
+
+/* The "data as of" line: one line of text, no flex gap between the words and the date. */
+.band .eyebrow{display:block}
+.band .eyebrow::before{display:inline-block;vertical-align:middle;margin:-2px 10px 0 4px}
+
+/* Tap targets of at least 44 x 44 px. */
+.brand{min-height:44px}
+.theme-b{width:44px;height:44px}
+.theme-b.lang-b{min-width:44px}
+.more-b{min-height:44px}
+
+/* Same roster label in the top bar and the bottom tab bar. */
+@media (max-width:720px){
+  .tabs a .t-long{display:inline}
+  .tabs a .t-short{display:none}
+  .tabs a,.tabs a:hover{text-align:center;line-height:1.15}
+}
+
+/* Desktop overview: team bars on the left, both lists stacked on the right, so the columns end close together. */
+@media (min-width:981px){
+  .two > .stack{display:contents}
+  .two > .stack > :first-child{grid-column:1;grid-row:1 / span 2}
+  .two > .stack > :nth-child(2),.two > .card{grid-column:2}
+}
+@media (min-width:1200px){
+  body.panel-open .two > .stack{display:flex}
+  body.panel-open .two > .card{grid-column:auto}
+}
+
+/* Phone: the biggest absences scroll sideways instead of stacking three rows deep. */
+@media (max-width:720px){
+  .heavy{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:max(16px,env(safe-area-inset-left,0px));margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px));padding-bottom:2px;scrollbar-width:none}
+  .heavy::-webkit-scrollbar{display:none}
+  .heavy > *{flex:0 0 152px;scroll-snap-align:start}
+}
+</style>
 </body>
 </html>

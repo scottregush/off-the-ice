@@ -1,0 +1,42 @@
+/* Layout fixes for the public site, added by build_site.py after the page's own styles
+   (so they win on equal specificity). Keep them here so the twice-daily rebuild keeps them. */
+
+/* Headline stays clear of the rink lines and faceoff circle on wide screens. */
+.band h1{max-width:840px}
+/* Tablets: the rink fills most of the band, so fade it behind the text as the phone layout already does. */
+@media (max-width:1023px){.rink{opacity:.3}}
+
+/* The "data as of" line: one line of text, no flex gap between the words and the date. */
+.band .eyebrow{display:block}
+.band .eyebrow::before{display:inline-block;vertical-align:middle;margin:-2px 10px 0 4px}
+
+/* Tap targets of at least 44 x 44 px. */
+.brand{min-height:44px}
+.theme-b{width:44px;height:44px}
+.theme-b.lang-b{min-width:44px}
+.more-b{min-height:44px}
+
+/* Same roster label in the top bar and the bottom tab bar. */
+@media (max-width:720px){
+  .tabs a .t-long{display:inline}
+  .tabs a .t-short{display:none}
+  .tabs a,.tabs a:hover{text-align:center;line-height:1.15}
+}
+
+/* Desktop overview: team bars on the left, both lists stacked on the right, so the columns end close together. */
+@media (min-width:981px){
+  .two > .stack{display:contents}
+  .two > .stack > :first-child{grid-column:1;grid-row:1 / span 2}
+  .two > .stack > :nth-child(2),.two > .card{grid-column:2}
+}
+@media (min-width:1200px){
+  body.panel-open .two > .stack{display:flex}
+  body.panel-open .two > .card{grid-column:auto}
+}
+
+/* Phone: the biggest absences scroll sideways instead of stacking three rows deep. */
+@media (max-width:720px){
+  .heavy{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:max(16px,env(safe-area-inset-left,0px));margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px));padding-bottom:2px;scrollbar-width:none}
+  .heavy::-webkit-scrollbar{display:none}
+  .heavy > *{flex:0 0 152px;scroll-snap-align:start}
+}
