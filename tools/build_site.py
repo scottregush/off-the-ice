@@ -92,6 +92,23 @@ if m and '<p id="r-msg" class="r-msg" aria-live="polite"></p>' in s and s.index(
     s = s.replace('<p id="r-msg" class="r-msg" aria-live="polite"></p>',
                   '<p id="r-msg" class="r-msg" aria-live="polite"></p>\n      <p class="lead">' + m.group(1) + '</p>', 1)
 
+#     d) rosters: Rename and Transfer are secondary actions, so they sit in a "⋯" menu next to the title
+#        (behaviour in tools/site_fixes.js; the existing [data-rename] / [data-xfer] handlers stay as they are).
+RMORE_OLD = '<button class="btn ghost" data-rename>Rinomina</button><button class="btn ghost" data-xfer aria-expanded="${xferOpen}">Trasferisci rose</button>'
+RMORE_NEW = ('<div class="rmore"><button class="btn ghost rmore-b" type="button" aria-expanded="false" aria-controls="r-more" '
+             'aria-label="Altre azioni" title="Altre azioni"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">'
+             '<circle cx="4.5" cy="10" r="1.6"/><circle cx="10" cy="10" r="1.6"/><circle cx="15.5" cy="10" r="1.6"/></svg></button>'
+             '<div class="rmore-m" id="r-more" hidden><button type="button" data-rename>Rinomina</button>'
+             '<button type="button" data-xfer>Trasferisci rose</button></div></div>')
+if RMORE_OLD in s:
+    s = s.replace(RMORE_OLD, RMORE_NEW)
+elif RMORE_NEW not in s:
+    print('warning: roster title buttons not found; the actions menu was not added')
+I18N_KEY = '"Le mie rose":["Mes effectifs","Meine Kader","My rosters"]'
+I18N_ADD = '"Altre azioni":["Autres actions","Weitere Aktionen","More actions"],'
+if I18N_ADD not in s and I18N_KEY in s:
+    s = s.replace(I18N_KEY, I18N_ADD + I18N_KEY, 1)
+
 # 2d. Layout and accessibility fixes for the open web (tools/site_fixes.css and .js), after the page's own.
 here = Path(__file__).resolve().parent
 s = re.sub(r'\s*<style id="site-fixes">.*?</style>', '', s, flags=re.S)

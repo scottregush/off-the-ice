@@ -48,6 +48,17 @@
    (The message stays in the layout so screen readers still announce it.) */
 .r-msg:empty{min-height:0;margin-bottom:-12px}
 
+/* Rosters: "⋯" menu holding Rename and Transfer rosters. */
+.rmore{position:relative}
+.rmore-b{width:44px;min-height:44px;padding:0;justify-content:center}
+.rmore-b svg{width:20px;height:20px;fill:currentColor;display:block}
+.rmore-m{position:absolute;top:calc(100% + 6px);left:0;z-index:8;min-width:210px;display:flex;flex-direction:column;padding:6px;background:var(--surface);border:1px solid var(--line-2);border-radius:12px;box-shadow:0 12px 32px -12px rgba(12,31,58,.35)}
+.rmore-m.end{left:auto;right:0}
+.rmore-m[hidden]{display:none}
+.rmore-m button{all:unset;box-sizing:border-box;display:flex;align-items:center;min-height:44px;padding:0 12px;border-radius:8px;font-weight:600;color:var(--ink);cursor:pointer}
+.rmore-m button:hover{background:var(--inset)}
+.rmore-m button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+
 /* Phone: the biggest absences scroll sideways instead of stacking three rows deep. */
 @media (max-width:720px){
   .heavy{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:max(16px,env(safe-area-inset-left,0px));margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px));padding-bottom:2px;scrollbar-width:none}
