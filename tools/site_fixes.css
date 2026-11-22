@@ -38,6 +38,16 @@
   body.panel-open .two > .card{grid-column:auto}
 }
 
+/* Status chip next to the name in the overview lists. */
+.feed .who .pill{font-size:11.5px;padding:3px 8px}
+
+/* "Missed" explanation under the result count on the injuries list. */
+.count-note{color:var(--muted);font-size:13.5px;max-width:72ch;margin-top:-16px}
+
+/* Rosters: no empty gap between the search field and the text under it while there is no message.
+   (The message stays in the layout so screen readers still announce it.) */
+.r-msg:empty{min-height:0;margin-bottom:-12px}
+
 /* Phone: the biggest absences scroll sideways instead of stacking three rows deep. */
 @media (max-width:720px){
   .heavy{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding-inline:max(16px,env(safe-area-inset-left,0px));margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px));padding-bottom:2px;scrollbar-width:none}

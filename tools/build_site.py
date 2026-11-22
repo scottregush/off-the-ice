@@ -71,6 +71,27 @@ if BAR_OLD in s and BAR_TR_OLD in s:
 elif BAR_NEW not in s:
     print('warning: team bar label code not found; the bar breakdown is not announced')
 
+# 2e. Patterns common to sports and fantasy injury lists:
+#     a) overview lists show the status as a text chip next to the name, not only as a coloured dot;
+FEED_OLD = '<span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}</span><span class="txt">${txt}</span>'
+FEED_NEW = '<span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}<span class="pill cat-${x.cat}">${CAT[x.cat].l}</span></span><span class="txt">${txt}</span>'
+if FEED_OLD in s:
+    s = s.replace(FEED_OLD, FEED_NEW)
+elif FEED_NEW not in s:
+    print('warning: overview list template not found; status chips not added')
+#     b) the "Missed" explanation sits with the list it explains, so on phones the first player shows sooner;
+m = re.search(r'\s*<p class="lead">(«Saltate».*?)</p>', s, flags=re.S)
+if m and '<p class="count" id="inj-count" aria-live="polite"></p>' in s:
+    s = s[:m.start()] + s[m.end():]
+    s = s.replace('<p class="count" id="inj-count" aria-live="polite"></p>',
+                  '<p class="count" id="inj-count" aria-live="polite"></p>\n      <p class="count-note">' + m.group(1) + '</p>', 1)
+#     c) rosters: the add-player search comes first, the explanation after it.
+m = re.search(r'\s*<p class="lead">(Crea una o più rose.*?)</p>', s, flags=re.S)
+if m and '<p id="r-msg" class="r-msg" aria-live="polite"></p>' in s and s.index('<p id="r-msg"') > m.start():
+    s = s[:m.start()] + s[m.end():]
+    s = s.replace('<p id="r-msg" class="r-msg" aria-live="polite"></p>',
+                  '<p id="r-msg" class="r-msg" aria-live="polite"></p>\n      <p class="lead">' + m.group(1) + '</p>', 1)
+
 # 2d. Layout and accessibility fixes for the open web (tools/site_fixes.css and .js), after the page's own.
 here = Path(__file__).resolve().parent
 s = re.sub(r'\s*<style id="site-fixes">.*?</style>', '', s, flags=re.S)

@@ -764,7 +764,6 @@ footer b{color:var(--ink);font-weight:600}
     <div class="band"><svg class="rink" viewBox="0 0 600 320" preserveAspectRatio="xMaxYMid slice" aria-hidden="true" focusable="false"><line class="rk-red" x1="330" y1="-10" x2="330" y2="330" pathLength="1"/><line class="rk-blue" x1="525" y1="-10" x2="525" y2="330" pathLength="1"/><circle class="rk-circle" cx="330" cy="160" r="92" pathLength="1"/><circle class="rk-dot" cx="330" cy="160" r="6"/><circle class="rk-dot" cx="450" cy="62" r="5"/><circle class="rk-dot" cx="450" cy="258" r="5"/></svg><div class="wrap">
       <span class="eyebrow">Elenco completo · dati al <span class="upd"></span></span>
       <h1>Tutti gli infortuni</h1>
-      <p class="lead">«Saltate» conta le partite consecutive mancate fino all'ultima giocata dalla squadra; il segno + indica che il giocatore non compare a referto dal 24 ottobre.</p>
     </div></div>
     <div class="wrap body">
       <div class="filterbar" id="f-bar">
@@ -785,6 +784,7 @@ footer b{color:var(--ink);font-weight:600}
       <div class="chips" id="f-cats" role="group" aria-label="Filtra per gravità"></div>
       </div>
       <p class="count" id="inj-count" aria-live="polite"></p>
+      <p class="count-note">«Saltate» conta le partite consecutive mancate fino all'ultima giocata dalla squadra; il segno + indica che il giocatore non compare a referto dal 24 ottobre.</p>
       <ul class="inj-list" id="inj-list"></ul>
     </div>
   </section>
@@ -831,13 +831,13 @@ footer b{color:var(--ink);font-weight:600}
     <div class="band"><svg class="rink" viewBox="0 0 600 320" preserveAspectRatio="xMaxYMid slice" aria-hidden="true" focusable="false"><line class="rk-red" x1="330" y1="-10" x2="330" y2="330" pathLength="1"/><line class="rk-blue" x1="525" y1="-10" x2="525" y2="330" pathLength="1"/><circle class="rk-circle" cx="330" cy="160" r="92" pathLength="1"/><circle class="rk-dot" cx="330" cy="160" r="6"/><circle class="rk-dot" cx="450" cy="62" r="5"/><circle class="rk-dot" cx="450" cy="258" r="5"/></svg><div class="wrap">
       <span class="eyebrow">Le tue rose · <span id="r-sync">salvate su questo dispositivo</span></span>
       <div id="r-head" class="r-head"></div>
-      <p class="lead">Crea una o più rose, per esempio quella del fantahockey: per ogni giocatore vedi subito se è disponibile, il bollettino medico, le ultime 5 partite e quando gioca.</p>
       <div class="adder">
         <label for="r-q" class="sr">Cerca un giocatore da aggiungere</label>
         <input type="search" id="r-q" placeholder="Cerca un giocatore da aggiungere…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="r-res" aria-autocomplete="list">
         <ul id="r-res" class="res" role="listbox" aria-label="Giocatori trovati" hidden></ul>
       </div>
       <p id="r-msg" class="r-msg" aria-live="polite"></p>
+      <p class="lead">Crea una o più rose, per esempio quella del fantahockey: per ogni giocatore vedi subito se è disponibile, il bollettino medico, le ultime 5 partite e quando gioca.</p>
       <div id="r-acct"></div>
       <div id="r-xfer"></div>
     </div></div>
@@ -1001,7 +1001,7 @@ function renderOverview(){
 
   const feedItem = (x, date, txt) => { const k = key(x.t, x.n);
     return `<li><button class="pbtn" data-player="${esc(k)}">${avatar(k, 'sm', x.cat)}
-      <span><span class="who"><span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}</span><span class="txt">${txt}</span></span>
+      <span><span class="who"><span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}<span class="pill cat-${x.cat}">${CAT[x.cat].l}</span></span><span class="txt">${txt}</span></span>
       <span class="d">${date}</span></button></li>`; };
   const news = D.inj.filter(x => x.since && x.since >= '2026-11-09').sort((a,b) => b.since.localeCompare(a.since) || a.n.localeCompare(b.n));
   const LIM = 6;
@@ -3645,6 +3645,16 @@ document.addEventListener('click', e => { if (!menu.hidden && !box.contains(e.ta
   body.panel-open .two > .stack{display:flex}
   body.panel-open .two > .card{grid-column:auto}
 }
+
+/* Status chip next to the name in the overview lists. */
+.feed .who .pill{font-size:11.5px;padding:3px 8px}
+
+/* "Missed" explanation under the result count on the injuries list. */
+.count-note{color:var(--muted);font-size:13.5px;max-width:72ch;margin-top:-16px}
+
+/* Rosters: no empty gap between the search field and the text under it while there is no message.
+   (The message stays in the layout so screen readers still announce it.) */
+.r-msg:empty{min-height:0;margin-bottom:-12px}
 
 /* Phone: the biggest absences scroll sideways instead of stacking three rows deep. */
 @media (max-width:720px){
