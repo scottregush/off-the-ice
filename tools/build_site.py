@@ -54,11 +54,52 @@ s = s.replace('document.title = tr(titleIT);', TITLES_JS)
 if TITLES_JS not in s:
     print('warning: title code not found; the browser-tab title is not translated')
 
-# 2c. Layout fixes for the open web (tools/site_fixes.css), placed after the page's own styles.
-fixes = Path(__file__).resolve().parent / 'site_fixes.css'
+# 2c. Screen readers: player buttons are named by their visible text (name, team, status, return date)
+#     instead of a label that only says "Open the card of <name>".
+s = re.sub(r' aria-label="Apri la scheda di \$\{esc\([^)]*\)\}"', '', s)
+# Team bars: the label lists the breakdown by category, which the bars show only by colour.
+# (Parentheses, not ' · ': the page's translator splits text at ' · ' before its rules run.)
+BAR_OLD = 'aria-label="${esc(t.name)}: ${list.length} indisponibili. Apri la scheda."'
+BAR_NEW = ('aria-label="${esc(t.name)}: ${list.length} indisponibili (${order.map(c => [CAT[c].l, list.filter(x => x.cat === c).length])'
+           '.filter(z => z[1]).map(z => z[0] + \' \' + z[1]).join(\', \')}). Apri la scheda."')
+BAR_TR_OLD = r"  [/^(.+): (\d+) indisponibili\. Apri la scheda\.$/,"
+BAR_TR_NEW = (r"  [/^(.+): (\d+) indisponibili \((.+)\)\. Apri la scheda\.$/, m => m[1] + ': ' + m[2] + ' ' + P(['absents', 'Ausfälle', 'unavailable']) + ' (' + "
+              r"m[3].split(', ').map(z => { const q = z.match(/^(.+) (\d+)$/); return q ? tr(q[1]) + ' ' + q[2] : z; }).join(', ') + '). ' + P(['Ouvrir la fiche.', 'Profil öffnen.', 'Open the card.'])],"
+              '\n')
+if BAR_OLD in s and BAR_TR_OLD in s:
+    s = s.replace(BAR_OLD, BAR_NEW).replace(BAR_TR_OLD, BAR_TR_NEW + BAR_TR_OLD, 1)
+elif BAR_NEW not in s:
+    print('warning: team bar label code not found; the bar breakdown is not announced')
+
+# 2e. Patterns common to sports and fantasy injury lists:
+#     a) overview lists show the status as a text chip next to the name, not only as a coloured dot;
+FEED_OLD = '<span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}</span><span class="txt">${txt}</span>'
+FEED_NEW = '<span class="nm">${esc(x.n)}</span>${tcode(T[x.t])}<span class="pill cat-${x.cat}">${CAT[x.cat].l}</span></span><span class="txt">${txt}</span>'
+if FEED_OLD in s:
+    s = s.replace(FEED_OLD, FEED_NEW)
+elif FEED_NEW not in s:
+    print('warning: overview list template not found; status chips not added')
+#     b) the "Missed" explanation sits with the list it explains, so on phones the first player shows sooner;
+m = re.search(r'\s*<p class="lead">(«Saltate».*?)</p>', s, flags=re.S)
+if m and '<p class="count" id="inj-count" aria-live="polite"></p>' in s:
+    s = s[:m.start()] + s[m.end():]
+    s = s.replace('<p class="count" id="inj-count" aria-live="polite"></p>',
+                  '<p class="count" id="inj-count" aria-live="polite"></p>\n      <p class="count-note">' + m.group(1) + '</p>', 1)
+#     c) rosters: the add-player search comes first, the explanation after it.
+m = re.search(r'\s*<p class="lead">(Crea una o più rose.*?)</p>', s, flags=re.S)
+if m and '<p id="r-msg" class="r-msg" aria-live="polite"></p>' in s and s.index('<p id="r-msg"') > m.start():
+    s = s[:m.start()] + s[m.end():]
+    s = s.replace('<p id="r-msg" class="r-msg" aria-live="polite"></p>',
+                  '<p id="r-msg" class="r-msg" aria-live="polite"></p>\n      <p class="lead">' + m.group(1) + '</p>', 1)
+
+# 2d. Layout and accessibility fixes for the open web (tools/site_fixes.css and .js), after the page's own.
+here = Path(__file__).resolve().parent
 s = re.sub(r'\s*<style id="site-fixes">.*?</style>', '', s, flags=re.S)
-if fixes.exists():
-    s += '\n<style id="site-fixes">\n' + fixes.read_text(encoding='utf8').strip() + '\n</style>'
+s = re.sub(r'\s*<script id="site-fixes-js">.*?</script>', '', s, flags=re.S)
+if (here / 'site_fixes.css').exists():
+    s += '\n<style id="site-fixes">\n' + (here / 'site_fixes.css').read_text(encoding='utf8').strip() + '\n</style>'
+if (here / 'site_fixes.js').exists():
+    s += '\n<script id="site-fixes-js">\n' + (here / 'site_fixes.js').read_text(encoding='utf8').strip() + '\n</script>'
 
 # 3. Initials only: no need to keep the image markup reachable.
 updated = re.search(r'"updated":"(\d{4}-\d{2}-\d{2})"', s)
