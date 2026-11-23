@@ -111,6 +111,16 @@ if I18N_ADD not in s and I18N_KEY in s:
 
 # 2d. Layout and accessibility fixes for the open web (tools/site_fixes.css and .js), after the page's own.
 here = Path(__file__).resolve().parent
+
+# 2f. Account sync (rosters across devices): the reconcile/save code from tools/site_sync.js replaces the page's own,
+#     so changes that fail to reach the account are kept and retried, and an empty device never overwrites the account.
+SYNC_RE = re.compile(r"const rosterKey = r => .*?\nfunction sbPush\(\)\{.*?\n(?=async function sbSendLink)", re.S)
+if (here / 'site_sync.js').exists():
+    sync_js = (here / 'site_sync.js').read_text(encoding='utf8').strip() + '\n'
+    if SYNC_RE.search(s):
+        s = SYNC_RE.sub(lambda m: sync_js, s, count=1)
+    else:
+        print('warning: account sync code not found; tools/site_sync.js was not applied')
 s = re.sub(r'\s*<style id="site-fixes">.*?</style>', '', s, flags=re.S)
 s = re.sub(r'\s*<script id="site-fixes-js">.*?</script>', '', s, flags=re.S)
 if (here / 'site_fixes.css').exists():
