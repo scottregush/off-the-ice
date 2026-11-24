@@ -9,6 +9,7 @@ The artifact page is the source of truth; this only adapts it for the open web:
 - no Claude-only features: rosters are saved in the visitor's browser
 - robots.txt and sitemap.xml when a site URL is given
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -36,8 +37,11 @@ s = s.replace('"ph":true', '"ph":false')
 s = re.sub(r'<p><b>Foto e statistiche\.</b>.*?</p>',
            '<p><b>Statistiche.</b> Statistiche stagionali da <a href="https://www.nationalleague.ch" target="_blank" rel="noopener">nationalleague.ch</a>. '
            'Questo sito non è affiliato alla National League né ai club.</p>', s, count=1, flags=re.S)
-s = re.sub(r'<p><b>Le mie rose\.</b>.*?</p>',
-           '<p><b>Le mie rose.</b> '+"Le tue rose sono salvate in questo browser. Se accedi con la tua email, vengono salvate anche nel tuo account, così le ritrovi sugli altri dispositivi. L'accesso è facoltativo e l'email serve solo a questo: non viene usata per altro né condivisa. I dati sono conservati presso Supabase, su server in Europa, e puoi eliminare account e dati in qualsiasi momento con «Elimina account» nella pagina delle rose."+' <a href="privacy.html">Privacy</a></p>', s, count=1, flags=re.S)
+ROSE_NOTE = ("Le tue rose sono salvate in questo browser. Se accedi con Google, vengono salvate anche nel tuo account, così le ritrovi "
+             "sugli altri dispositivi. L'accesso è facoltativo e del tuo account Google usiamo solo l'indirizzo email, per collegare le rose: "
+             "non viene usato per altro né condiviso. I dati sono conservati presso Supabase, su server in Europa, e puoi eliminare account "
+             "e dati in qualsiasi momento con «Elimina account» nella pagina delle rose.")
+s = re.sub(r'<p><b>Le mie rose\.</b>.*?</p>', lambda m: '<p><b>Le mie rose.</b> ' + ROSE_NOTE + '</p>', s, count=1, flags=re.S)
 
 # 2b. English by default. Visitors pick another language (IT/FR/DE/EN) from the menu, and the choice is kept
 #     in their browser; the browser's own language no longer decides.
@@ -108,6 +112,58 @@ I18N_KEY = '"Le mie rose":["Mes effectifs","Meine Kader","My rosters"]'
 I18N_ADD = '"Altre azioni":["Autres actions","Weitere Aktionen","More actions"],'
 if I18N_ADD not in s and I18N_KEY in s:
     s = s.replace(I18N_KEY, I18N_ADD + I18N_KEY, 1)
+
+# 2g. Sign in with Google only. The email link is gone: Supabase's built-in mailer sends at most 2 emails an hour
+#     and only to the project's team, so other visitors never got their link.
+LOGIN_RE = re.compile(r"function loginForm\(where, cancel\)\{\n.*?\n\}\n", re.S)
+GBTN = re.search(r'<button class="btn g-btn" type="button" data-sb-google>.*?Continua con Google</button>', s)
+if 'const G_BTN' not in s:
+    if LOGIN_RE.search(s) and GBTN:
+        s = LOGIN_RE.sub(lambda m: (
+            'const G_BTN = `' + GBTN.group(0) + '`;\n'
+            'function loginForm(where, cancel){\n'
+            '  return `${G_BTN}${cancel ? \'<button class="btn ghost" type="button" data-sb-cancel>Annulla</button>\' : \'\'}\n'
+            '    <p class="muted small">Usiamo il tuo account Google solo per collegare le tue rose.</p>`;\n'
+            '}\n'), s, count=1)
+    else:
+        print('warning: sign-in form not found; the email sign-in was not removed')
+PANEL_OLD = "<button class=\"btn\" data-sb-login>${sbState === 'sent' ? 'Rimanda il link' : 'Accedi'}</button>"
+if PANEL_OLD in s:
+    s = s.replace(PANEL_OLD, '${G_BTN}', 1)
+elif 'const G_BTN' in s and "'Accedi per ritrovare le tue rose su tutti i tuoi dispositivi.'}</span>${G_BTN}" not in s:
+    print('warning: rosters sign-in button not found; it still opens the old form')
+s = s.replace("'Il link non è valido o è scaduto: chiedine uno nuovo.'", "'Accesso non riuscito: riprova.'", 1)
+LOGIN_I18N = {
+    'Usiamo il tuo account Google solo per collegare le tue rose.': [
+        'Nous utilisons ton compte Google uniquement pour relier tes effectifs.',
+        'Wir nutzen dein Google-Konto nur, um deine Kader zu verknüpfen.',
+        'We only use your Google account to link your rosters.'],
+    'Accesso non riuscito: riprova.': [
+        'La connexion a échoué : réessaie.',
+        'Anmeldung fehlgeschlagen: Versuche es noch einmal.',
+        "Sign-in didn't work: please try again."],
+    ROSE_NOTE: [
+        "Tes effectifs sont enregistrés dans ce navigateur. Si tu te connectes avec Google, ils sont aussi enregistrés dans ton compte, "
+        "pour les retrouver sur tes autres appareils. La connexion est facultative et de ton compte Google nous utilisons uniquement "
+        "l'adresse e-mail, pour relier tes effectifs : elle n'est utilisée pour rien d'autre ni partagée. Les données sont conservées chez "
+        "Supabase, sur des serveurs en Europe, et tu peux supprimer ton compte et tes données à tout moment avec « Supprimer le compte » "
+        "sur la page des effectifs.",
+        "Deine Kader werden in diesem Browser gespeichert. Wenn du dich mit Google anmeldest, werden sie auch in deinem Konto gespeichert, "
+        "damit du sie auf deinen anderen Geräten wiederfindest. Die Anmeldung ist freiwillig, und von deinem Google-Konto nutzen wir nur "
+        "die E-Mail-Adresse, um deine Kader zu verknüpfen: Sie wird für nichts anderes verwendet und nicht weitergegeben. Die Daten liegen "
+        "bei Supabase auf Servern in Europa, und du kannst Konto und Daten jederzeit mit «Konto löschen» auf der Kaderseite löschen.",
+        "Your rosters are saved in this browser. If you sign in with Google, they're also saved in your account so you can find them on "
+        "your other devices. Signing in is optional and from your Google account we only use the email address, to link your rosters: "
+        "it isn't used for anything else or shared. The data is stored with Supabase on servers in Europe, and you can delete your "
+        "account and data at any time with \"Delete account\" on the rosters page."],
+}
+I18N_AT = '"Continua con Google":['
+if I18N_AT in s:
+    add = ''.join(json.dumps(k, ensure_ascii=False) + ':' + json.dumps(v, ensure_ascii=False) + ','
+                  for k, v in LOGIN_I18N.items() if json.dumps(k, ensure_ascii=False) + ':' not in s)
+    s = s.replace(I18N_AT, add + I18N_AT, 1)
+else:
+    print('warning: translations not found; the new sign-in texts stay in Italian')
 
 # 2d. Layout and accessibility fixes for the open web (tools/site_fixes.css and .js), after the page's own.
 here = Path(__file__).resolve().parent
