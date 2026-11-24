@@ -16,7 +16,7 @@ Sito: https://scottregush.github.io/off-the-ice/
 
 ## Account e rose su più dispositivi (Supabase)
 
-L'accesso è facoltativo, con Google o con un link via email, e serve solo a ritrovare le rose su tutti i dispositivi. Account e rose stanno nel progetto Supabase `eftowfvehagppbeujemr` (server in Europa). È attivo solo sul sito pubblico, non nella versione dentro Claude.
+L'accesso è facoltativo, solo con Google, e serve solo a ritrovare le rose su tutti i dispositivi. Account e rose stanno nel progetto Supabase `eftowfvehagppbeujemr` (server in Europa). È attivo solo sul sito pubblico, non nella versione dentro Claude.
 
 ### Preparare il database
 
@@ -35,7 +35,7 @@ Lo script crea:
 
 In **Authentication** su Supabase:
 
-- **Sign In / Providers**: attivi *Email* e *Google*. Per Google servono Client ID e Client Secret di un client OAuth creato in Google Cloud Console, con questo URI di reindirizzamento autorizzato: `https://eftowfvehagppbeujemr.supabase.co/auth/v1/callback`.
+- **Sign In / Providers**: il sito usa solo *Google*. L'accesso con link via email è stato tolto dal sito perché il servizio email predefinito di Supabase manda al massimo 2 email all'ora e solo agli indirizzi del team del progetto; per riattivarlo servirebbe un servizio di invio proprio (*Authentication → Emails → SMTP Settings*). `build_site.py` toglie il modulo email a ogni build (sezione 2g). Per Google servono Client ID e Client Secret di un client OAuth creato in Google Cloud Console, con questo URI di reindirizzamento autorizzato: `https://eftowfvehagppbeujemr.supabase.co/auth/v1/callback`.
 - **URL Configuration**: in *Redirect URLs* deve esserci `https://scottregush.github.io/off-the-ice/`, l'indirizzo a cui il sito chiede di tornare dopo l'accesso. Se manca, dopo il login si finisce sul *Site URL*.
 
 La chiave scritta nella pagina (`sb_publishable_…`) è quella pubblica ed è fatta per stare nel browser: i dati sono protetti dalle regole di accesso, non dalla chiave. La chiave segreta non va mai messa nel sito né nel repository.
